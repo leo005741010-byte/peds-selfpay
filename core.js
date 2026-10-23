@@ -4,13 +4,13 @@
 // 資料全部在同一份 Google 試算表：
 //   「門診」分頁＝門診表單（Google 表單，放在門診護理師電腦）的回應
 //   「病房」分頁＝病房表單的回應：病房 NP 用這個 App 送出；刪除（作廢）紀錄也記在這裡
-//   「項目」分頁＝自費項目、價錢、PF 比例、適用起（新增項目、調價都在這裡改）
+//   「項目」分頁＝自費項目、價錢、PF（每件的金額）、適用起（新增項目、調價都在這裡改）
 //   「醫師」分頁＝開單醫師名單
 //   「系統」分頁＝病房表單的送出位址與欄位代號（建立腳本自動填好）
 // 本檔公開在網站上，所以不含任何姓名、價錢、試算表或表單網址：
 //   試算表代號由連結 #s=… 帶進來、存在這台裝置；其他全部從試算表讀。
 // ============================================================
-const APP_VER='2026.10.23d';
+const APP_VER='2026.10.23e';
 const LS_SHEET='pedsSelfpay_sheet';
 
 const $=id=>document.getElementById(id);
@@ -100,16 +100,19 @@ const normItem=v=>String(v==null?'':v).replace(/\s+/g,'');
 // ---------- 設定：項目／醫師／系統 ----------
 function parseItems(t){
   const ci=re=>t.cols.findIndex(l=>re.test(l));
-  const iN=ci(/^項目/), iP=ci(/價錢|價格|金額/), iF=ci(/PF/i), iFrom=ci(/適用/), iOff=ci(/停用/);
+  const iN=ci(/^項目/), iP=ci(/價錢|價格|金額/), iF=ci(/^PF/i), iFrom=ci(/適用/), iOff=ci(/停用/);
+  const ratioCol=iF>=0&&/比例|%/.test(t.cols[iF]);   // 舊版的「PF比例」欄（價錢的幾 %）
+  const num=v=>Number(String(v==null?'':v).replace(/[,\s元$%]/g,''))||0;
   const out=[];
   t.rows.forEach((r,i)=>{
     const name=normItem(r[iN]); if(!name) return;
-    const price=Number(String(r[iP]==null?'':r[iP]).replace(/[,\s元$]/g,''))||0;
-    let pf=iF<0?0.1:r[iF];
-    if(typeof pf==='string'){ const p=pf.replace(/[%\s]/g,''); pf=Number(p)||0; if(/%/.test(String(r[iF]))) pf/=100; }
-    pf=Number(pf)||0; if(pf>1) pf/=100;   // 打 10 或 10% 都當 10%
+    const price=num(r[iP]);
+    // PF＝每件的金額（元）。舊的比例欄、或格子打成 10%／0.1 的，換算成元
+    let pfAmt=0;
+    if(iF>=0){ const raw=r[iF], v=num(raw);
+      pfAmt=ratioCol||/%/.test(String(raw))||(v>0&&v<1)?Math.round(price*(v>1?v/100:v)):Math.round(v); }
     const off=iOff>=0&&isOn(r[iOff]);
-    out.push({name,price,pf,from:iFrom>=0?parseFrom(r[iFrom]):null,off,order:i});
+    out.push({name,price,pfAmt,from:iFrom>=0?parseFrom(r[iFrom]):null,off,order:i});
   });
   return out;
 }

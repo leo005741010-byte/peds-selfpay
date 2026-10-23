@@ -213,7 +213,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]mock\b/.test(locat
 <script>
 'use strict';
 // ============================================================
-// 管理頁：讀試算表的門診＋病房兩個分頁，每月統計件數、金額（件數×價錢）、PF（價錢×PF 比例），
+// 管理頁：讀試算表的門診＋病房兩個分頁，每月統計件數、金額（件數×價錢）、PF（件數×每件 PF），
 // 依開單醫師、來源、項目分開看。項目與價錢在試算表「項目」分頁改（某個月起調價：加一列、填適用起）。
 // 開著時每分鐘讀一次試算表。
 // ============================================================
@@ -235,10 +235,10 @@ const busyKeys={};    // 剛按了刪除／復原、還在等試算表出現的�
 function saveCache(){ try{ localStorage.setItem(LS_CACHE,JSON.stringify({sid:SID,cfg:D.cfg,recs:D.recs,checked})); }catch(e){} }
 
 // ---------- 計算 ----------
-// 每一筆的金額＝那個月適用的價錢；PF＝價錢×PF 比例（四捨五入到元）
+// 每一筆的金額＝那個月適用的價錢；PF＝那個月適用的每件 PF
 function prep(){
   _calc={}; _months=new Set();
-  D.recs.forEach(r=>{ const p=priceOf(D.cfg,r.item,r.k); r.known=!!p; r.amt=p?p.price:0; r.pf=p?Math.round(p.price*p.pf):0; if(!r.void) _months.add(r.k); });
+  D.recs.forEach(r=>{ const p=priceOf(D.cfg,r.item,r.k); r.known=!!p; r.amt=p?p.price:0; r.pf=p?p.pfAmt:0; if(!r.void) _months.add(r.k); });
 }
 const hasMonth=k=>_months.has(k);
 function calcMonth(k){
@@ -427,11 +427,11 @@ function cfgHtml(){
   const rows=D.cfg.items.slice().sort((a,b)=>a.order-b.order).map(x=>{
     const eff=priceOf(D.cfg,x.name,nowK)===x;   // 現在適用的那一列（調價、停用按鈕放在這一列）
     return `<tr${eff||x.from>nowK?'':' class="old"'}><td class="l nmc">${esc(x.name)}${x.off?' <span class="tag">停用</span>':''}</td><td class="n pz" data-l="價錢">${fmt(x.price)}</td>`+
-      `<td class="n sub" data-l="PF 比例">${Math.round(x.pf*1000)/10}%</td><td class="n sub" data-l="PF">${fmt(Math.round(x.price*x.pf))}</td><td class="n sub" data-l="適用起">${x.from?keyLabel(x.from)+'起':'—'}</td>`+
+      `<td class="n sub" data-l="PF">${fmt(x.pfAmt)}</td><td class="n sub" data-l="適用起">${x.from?keyLabel(x.from)+'起':'—'}</td>`+
       (W?`<td class="acts">${eff?`<button class="btn mini outline" data-act="ed-price" data-i="${x.order}">調價</button>`:''}<button class="btn mini ghost" data-act="ed-edit" data-i="${x.order}">修改</button>`+
         (eff?`<button class="btn mini ghost" data-act="ed-off" data-n="${esc(x.name)}" data-v="${x.off?0:1}">${x.off?'恢復':'停用'}</button>`:'')+'</td>':'')+'</tr>'; }).join('');
-  let h=`<div class="tw"><table class="cfgt"><thead><tr><th class="l">項目</th><th>價錢</th><th>PF 比例</th><th>PF</th><th>適用起</th>${W?'<th></th>':''}</tr></thead>
-    <tbody>${rows||`<tr><td class="l mut" colspan="${W?6:5}">試算表「項目」分頁是空的</td></tr>`}</tbody></table></div>`;
+  let h=`<div class="tw"><table class="cfgt"><thead><tr><th class="l">項目</th><th>價錢</th><th>PF</th><th>適用起</th>${W?'<th></th>':''}</tr></thead>
+    <tbody>${rows||`<tr><td class="l mut" colspan="${W?5:4}">試算表「項目」分頁是空的</td></tr>`}</tbody></table></div>`;
   if(W) h+=edit?editorHtml():'<div class="row"><button class="btn outline" data-act="ed-add">＋ 新增項目</button></div>';
   // 開單醫師
   h+=`<div class="mixh" style="margin-top:16px">開單醫師</div><div class="chips">${D.cfg.docs.map(n=>{ const off=offD.has(n);
@@ -446,7 +446,7 @@ function editorHtml(){
   return `<div class="edbox" id="cfg-edit"><div class="mixh">${esc(t)}</div><div class="edgrid">
     ${e.mode==='price'?'':`<label>項目名稱<input type="text" data-ed="name" value="${esc(e.name)}" autocomplete="off"></label>`}
     <label>價錢<input type="number" inputmode="numeric" min="1" step="1" data-ed="price" value="${esc(e.price)}"></label>
-    <label>PF 比例（%）<input type="number" inputmode="decimal" min="0" max="100" step="0.1" data-ed="pf" value="${esc(e.pf)}"></label>
+    <label>PF<input type="number" inputmode="numeric" min="0" step="1" data-ed="pf" value="${esc(e.pf)}"></label>
     <label>適用起<input type="month" data-ed="from" value="${esc(e.from)}"></label></div>
     <div class="row"><button class="btn" data-act="ed-save"${saving?' disabled':''}>${saving?'儲存中…':'儲存'}</button><button class="btn ghost" data-act="ed-cancel"${saving?' disabled':''}>取消</button></div></div>`;
 }
@@ -476,17 +476,18 @@ function edSave(){
   const name=String(e.mode==='price'?e.name:e.name||'').replace(/\s+/g,''), price=Number(e.price), pf=e.pf===''?NaN:Number(e.pf), from=monthOut(e.from);
   if(!name){ alert('請填項目名稱。'); return; }
   if(!(price>0&&Math.round(price)===price)){ alert('價錢請填大於 0 的整數。'); return; }
-  if(!(pf>=0&&pf<=100)){ alert('PF 比例請填 0～100。'); return; }
+  if(!(pf>=0&&Math.round(pf)===pf)){ alert('PF 請填 0 以上的整數（元）。'); return; }
+  if(pf>price){ alert('PF 不能比價錢高。'); return; }
   if(e.from&&!from){ alert('適用起的月份不對。'); return; }
   if(e.mode==='price'&&!from){ alert('調價要填「適用起」：從哪個月開始用新價錢。'); return; }
   const fk=from?parseFrom(from):null;
   const clash=D.cfg.items.some(x=>x.name===name&&(x.from||null)===fk&&!(e.mode==='edit'&&x.name===e.old.name&&x.price===e.old.price&&(x.from||null)===(e.old.from||null)));
   if(clash){ alert(`「${name}」${from?fromTxt(fk):'（一直適用）'}已經有一列了。要從某個月起改價錢，請按那一列的「調價」。`); return; }
-  const pfAmt=Math.round(price*pf/100), what=`項目：${name}\n價錢：${fmt(price)}\nPF：${pf}%（${fmt(pfAmt)}）\n適用：${fromTxt(fk)}`;
+  const what=`項目：${name}\n價錢：${fmt(price)}\nPF：${fmt(pf)}\n適用：${fromTxt(fk)}`;
   const title={add:'新增這個項目？',price:`從${fromTxt(fk)}改用新價錢？`,edit:'修改這一列？'}[e.mode];
   const before=e.mode==='edit'?`\n\n原本：${e.old.name}・${fmt(e.old.price)}・${fromTxt(e.old.from)}`:'';
   if(!confirm(`${title}\n\n${what}${before}`)) return;
-  saveAdmin(e.mode==='edit'?{op:'editItem',old:{name:e.old.name,price:e.old.price,from:e.old.from?e.old.from.replace(/^(\d+)-0?(\d+)$/,'$1/$2'):''},name,price,pf,from}:{op:'addItem',name,price,pf,from});
+  saveAdmin(e.mode==='edit'?{op:'editItem',old:{name:e.old.name,price:e.old.price,from:e.old.from?e.old.from.replace(/^(\d+)-0?(\d+)$/,'$1/$2'):''},name,price,pfAmt:pf,from}:{op:'addItem',name,price,pfAmt:pf,from});
 }
 
 // ---------- 組成橫條 ----------
@@ -614,7 +615,7 @@ function showTrend(m){
 // 點醫師姓名：這個月各項目、逐月 PF、這個月的明細
 function showDoc(n){
   const c=calcMonth(cur), o=c.doc[n]||{n:0,amt:0,pf:0,item:{}}, m='d:'+n, ks=trendKeys();
-  const mix=mixHtml(itemOrder(o.item).map(it=>{ const p=priceOf(D.cfg,it,cur); return {label:it,note:o.item[it]+' 件',v:o.item[it]*(p?Math.round(p.price*p.pf):0),c:itemColor(it)}; }),'元');
+  const mix=mixHtml(itemOrder(o.item).map(it=>{ const p=priceOf(D.cfg,it,cur); return {label:it,note:o.item[it]+' 件',v:o.item[it]*(p?p.pfAmt:0),c:itemColor(it)}; }),'元');
   const rows=c.rows.filter(r=>r.doc===n).sort((a,b)=>b.d-a.d||b.ts-a.ts);
   $('dlg').innerHTML=`<h2>${esc(n||'（未填醫師）')}<button class="btn mini ghost" data-act="close">關閉</button></h2>
     <div class="tiles big2" style="margin:10px 0"><div class="tile big"><div class="v">${fmt(o.pf)}<small>元</small></div><div class="l">${keyLabel(cur)} PF</div><div class="s">${vsPrevHtml(m,cur)}</div></div>
@@ -673,10 +674,10 @@ function act(a,t){
   else if(a==='showvoid'){ showVoid=!showVoid; renderAll(); }
   else if(a==='install'){ if(_installEvt){ const e=_installEvt; _installEvt=null; e.prompt(); renderAll(); } }
   else if(a==='open-browser') openInBrowser();
-  else if(a==='ed-add'){ edit={mode:'add',name:'',price:'',pf:'10',from:''}; ui.cfg=true; renderAll(); const x=document.querySelector('[data-ed=name]'); if(x) x.focus(); }
+  else if(a==='ed-add'){ edit={mode:'add',name:'',price:'',pf:'',from:''}; ui.cfg=true; renderAll(); const x=document.querySelector('[data-ed=name]'); if(x) x.focus(); }
   else if(a==='ed-price'||a==='ed-edit'){ const x=D.cfg.items.find(y=>y.order===Number(t.dataset.i)); if(!x) return;
-    edit=a==='ed-price'?{mode:'price',name:x.name,price:'',pf:String(Math.round(x.pf*1000)/10),from:monthIn(shiftKey(todayKey(),1))}:
-      {mode:'edit',old:{name:x.name,price:x.price,from:x.from},name:x.name,price:String(x.price),pf:String(Math.round(x.pf*1000)/10),from:monthIn(x.from)};
+    edit=a==='ed-price'?{mode:'price',name:x.name,price:'',pf:'',from:monthIn(shiftKey(todayKey(),1))}:
+      {mode:'edit',old:{name:x.name,price:x.price,from:x.from},name:x.name,price:String(x.price),pf:String(x.pfAmt),from:monthIn(x.from)};
     renderAll(); const f=document.querySelector('[data-ed=price]'); if(f) f.focus(); }
   else if(a==='ed-cancel'){ if(edit&&edit.dirty&&!confirm('放棄還沒儲存的內容？')) return; edit=null; renderAll(); }
   else if(a==='ed-save') edSave();
