@@ -457,7 +457,7 @@ function cfgHtml(){
     return `<span class="chip${off?' off':''}">${esc(n)}${off?'<span class="tag">停用</span>':''}${!W?'':used.has(n)?`<button class="btn mini ghost" data-act="doc-off" data-n="${esc(n)}" data-v="${off?0:1}">${off?'恢復':'停用'}</button>`:
       `<button class="btn mini ghost" data-act="doc-del" data-n="${esc(n)}">刪除</button>`}</span>`; }).join('')}</div>`;
   if(W) h+=`<div class="row"><input type="text" id="doc-new" placeholder="醫師姓名" autocomplete="off" value="${esc(docNew)}" style="width:150px"><button class="btn outline" data-act="doc-add"${saving?' disabled':''}>＋ 新增醫師</button></div>`;
-  h+=`<div class="row"><a class="btn ghost" href="${esc(sheetEdit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
+  h+=`<div class="row"><a class="btn ghost" href="${esc(sheetEdit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec\?p=opd$/.test(sys.opdPage)?`<a class="btn ghost" href="${esc(sys.opdPage)}" target="_blank" rel="noopener">今天的門診登錄</a>`:''}${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
   return h;
 }
 // 新增／調價／修改的填寫框（按「儲存」才送出）

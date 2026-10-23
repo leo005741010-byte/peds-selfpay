@@ -10,7 +10,7 @@
 // 本檔公開在網站上，所以不含任何姓名、價錢、試算表或表單網址：
 //   試算表代號由連結 #s=… 帶進來、存在這台裝置；其他全部從試算表讀。
 // ============================================================
-const APP_VER='2026.10.23h';
+const APP_VER='2026.10.23i';
 const LS_SHEET='pedsSelfpay_sheet';
 
 const $=id=>document.getElementById(id);
@@ -134,7 +134,7 @@ function parseDocs(t){
 function parseSys(t){
   const o={}; t.rows.forEach(r=>{ const k=normLabel(r[0]); if(k) o[k]=String(r[1]==null?'':r[1]).trim(); });
   return {form:o['病房表單']||'', eDate:o['欄位_日期']||'', eMrn:o['欄位_病歷號']||'', eItem:o['欄位_項目']||'', eDoc:o['欄位_醫師']||'', eVoid:o['欄位_作廢']||'',
-    eSrc:o['欄位_來院']||'', clinic:o['門診表單']||'', itemsGid:o['項目分頁']||'', write:o['管理寫入']||'', mrnLen:Number(o['病歷號位數'])||0};
+    eSrc:o['欄位_來院']||'', clinic:o['門診表單']||'', itemsGid:o['項目分頁']||'', write:o['管理寫入']||'', opdPage:o['門診修改頁']||'', mrnLen:Number(o['病歷號位數'])||0};
 }
 // 類別的先後：檢驗、疫苗，其他的排後面
 const CATS=['檢驗','疫苗'];
