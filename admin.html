@@ -149,7 +149,6 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#eef6f9}
 .instc ol{margin:6px 0 0;padding-left:22px;font-size:14px}
 .instc li{margin:3px 0}
 .instc .ico{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:12px;margin:0 2px}
-.steps{margin:4px 0 0;padding-left:22px;font-size:14px}.steps li{margin:3px 0}
 input[type=text],input[type=number],input[type=month]{font:inherit;font-size:15px;border:1px solid #c5d3db;border-radius:7px;padding:6px 10px;background:#fff;color:var(--txt)}
 input:focus{outline:2px solid #8cc3d6;outline-offset:0}
 tr.old td{color:var(--mut)}
@@ -224,11 +223,13 @@ let D=null, checked=0, busy=false, fail=null, delta=null;
 let cur=null, pickOpen=false, pickYear=null, _mbKeys=[];
 const ui={};          // 卡片展開狀態只記在這次開啟（每次打開都收起來）
 let showVoid=false, _calc={}, _months=new Set();
-// 在管理頁修改「項目」「醫師」：透過 Apps Script 網頁應用程式（網址＝修改權限，存在這台裝置或連結的 #w=…，不寫進試算表）
-const ADMIN_URL='https://leo005741010-byte.github.io/peds-selfpay/admin.html', LS_WRITE='pedsSelfpay_w';
+// 在管理頁修改「項目」「醫師」：透過 Apps Script 網頁應用程式。它的網址記在試算表「系統」分頁的「管理寫入」
+// （部署後打開網址一次就會自己寫上去），每個人打開管理頁都讀得到，不用貼；連結帶 #w=… 時以連結為準（舊連結相容）
 const writeIdOf=v=>{ const m=String(v||'').match(/[#&]w=([A-Za-z0-9_-]{30,})/)||String(v||'').match(/script\.google\.com\/macros\/s\/([A-Za-z0-9_-]{30,})\/(?:exec|dev)/); return m?m[1]:null; };
-let WID=(()=>{ const h=writeIdOf(location.hash); if(h){ try{ localStorage.setItem(LS_WRITE,h); }catch(e){} return h; } try{ return localStorage.getItem(LS_WRITE)||null; }catch(e){ return null; } })();
-let edit=null, saving=false, wSetup=false, docNew='', _deferred=false;   // edit＝正在填的項目表單 {mode:'add'|'price'|'edit', old, name, price, pf, from, dirty}
+const WID_LINK=writeIdOf(location.hash);
+const writeId=()=>WID_LINK||writeIdOf(D&&D.cfg.sys.write)||null;
+try{ localStorage.removeItem('pedsSelfpay_w'); }catch(e){}   // 舊版存在裝置上的網址，改成從試算表讀以後不再用
+let edit=null, saving=false, docNew='', _deferred=false;   // edit＝正在填的項目表單 {mode:'add'|'price'|'edit', old, name, price, pf, from, dirty}
 const busyKeys={};    // 剛按了刪除／復原、還在等試算表出現的：{key:時間}
 (function loadCache(){ try{ const c=JSON.parse(localStorage.getItem(LS_CACHE)||'null'); if(c&&c.sid===SID){ D={cfg:c.cfg,recs:c.recs}; checked=c.checked||0; prep(); } }catch(e){} })();
 function saveCache(){ try{ localStorage.setItem(LS_CACHE,JSON.stringify({sid:SID,cfg:D.cfg,recs:D.recs,checked})); }catch(e){} }
@@ -421,7 +422,7 @@ function yearHtml(){
     <tr class="tot"><td class="l">合計</td><td class="n">${t.n}</td><td class="n">${t.o}</td><td class="n">${t.w}</td><td class="n">${fmt(t.amt)}</td><td class="amt">${fmt(t.pf)}</td></tr></tbody></table></div>`;
 }
 function cfgHtml(){
-  const sys=D.cfg.sys, W=!!WID, nowK=todayKey(), offD=new Set(D.cfg.docsOff||[]);
+  const sys=D.cfg.sys, W=!!writeId(), nowK=todayKey(), offD=new Set(D.cfg.docsOff||[]);
   const sheetEdit=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(SID)}/edit${sys.itemsGid?'#gid='+encodeURIComponent(sys.itemsGid):''}`;
   const rows=D.cfg.items.slice().sort((a,b)=>a.order-b.order).map(x=>{
     const eff=priceOf(D.cfg,x.name,nowK)===x;   // 現在適用的那一列（調價、停用按鈕放在這一列）
@@ -436,15 +437,7 @@ function cfgHtml(){
   h+=`<div class="mixh" style="margin-top:16px">開單醫師</div><div class="chips">${D.cfg.docs.map(n=>{ const off=offD.has(n);
     return `<span class="chip${off?' off':''}">${esc(n)}${off?'<span class="tag">停用</span>':''}${W?`<button class="btn mini ghost" data-act="doc-off" data-n="${esc(n)}" data-v="${off?0:1}">${off?'恢復':'停用'}</button>`:''}</span>`; }).join('')}</div>`;
   if(W) h+=`<div class="row"><input type="text" id="doc-new" placeholder="醫師姓名" autocomplete="off" value="${esc(docNew)}" style="width:150px"><button class="btn outline" data-act="doc-add"${saving?' disabled':''}>＋ 新增醫師</button></div>`;
-  // 修改權限（網頁應用程式網址）
-  if(!W) h+=wSetup?`<div class="edbox"><div class="mixh">開通新增項目（只要做一次）</div><ol class="steps">
-      <li>Apps Script 右上「<b>部署</b>」→「<b>新增部署作業</b>」</li>
-      <li>左邊齒輪選「<b>網頁應用程式</b>」；執行身分「<b>我</b>」、誰可以存取「<b>所有人</b>」→「部署」</li>
-      <li>複製「網頁應用程式」的網址，貼在下面</li></ol>
-      <div class="row"><input type="text" id="w-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" style="flex:1;min-width:220px">
-      <button class="btn" data-act="w-save">儲存</button><button class="btn ghost" data-act="w-cancel">取消</button></div></div>`:'';
-  h+=`<div class="row">${W?'<button class="btn ghost" data-act="w-copy">複製副院長用的連結</button>':wSetup?'':'<button class="btn outline" data-act="w-setup">＋ 新增項目／修改價錢</button>'}
-    <a class="btn ghost" href="${esc(sheetEdit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
+  h+=`<div class="row"><a class="btn ghost" href="${esc(sheetEdit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
   return h;
 }
 // 新增／調價／修改的填寫框（按「儲存」才送出）
@@ -464,7 +457,7 @@ const fromTxt=k=>k?keyLabel(k)+'起':'一直適用';
 async function adminPost(req){
   const body=Object.assign({s:SID},req);
   if(window.PS_MOCK&&window.PS_MOCK.admin) return window.PS_MOCK.admin(body);
-  const r=await fetch(`https://script.google.com/macros/s/${WID}/exec`,{method:'POST',body:JSON.stringify(body)});   // text/plain：不用預檢，跨網域可以讀回應
+  const r=await fetch(`https://script.google.com/macros/s/${writeId()}/exec`,{method:'POST',body:JSON.stringify(body)});   // text/plain：不用預檢，跨網域可以讀回應
   let j=null; try{ j=await r.json(); }catch(e){}
   if(!j) throw new Error('網頁應用程式沒有回應（部署時「誰可以存取」要選「所有人」）');
   if(!j.ok) throw new Error(j.msg||'修改失敗');
@@ -658,18 +651,6 @@ async function doVoid(key,restore){
   for(const ms of [3000,6000,10000,20000]){ await new Promise(res=>setTimeout(res,ms)); await refresh(true); if(!busyKeys[key]) break; }
   delete busyKeys[key]; rerenderOpen();
 }
-async function saveWrite(){
-  const id=writeIdOf(($('w-url')||{}).value);
-  if(!id){ alert('這看起來不是網頁應用程式的網址（應該長得像 https://script.google.com/macros/s/…/exec）。'); return; }
-  if(!window.PS_MOCK){
-    let ok=false; try{ const r=await fetch(`https://script.google.com/macros/s/${id}/exec`); ok=(await r.text()).trim()==='ok'; }catch(e){}
-    if(!ok){ alert('連不上這個網址。\n請確認部署時「執行身分」選「我」、「誰可以存取」選「所有人」，而且程式碼是新版（有 doPost）。'); return; }
-  }
-  if(!confirm('在這台裝置開啟「項目與價錢」的修改？')) return;
-  WID=id; wSetup=false; try{ localStorage.setItem(LS_WRITE,id); }catch(e){}
-  history.replaceState(null,'',location.pathname+location.search+`#s=${SID}&w=${id}`);   // iPhone「加入主畫面」會存下含修改權限的完整網址
-  renderAll();
-}
 // 視窗開著時連視窗一起重畫（目前開的是哪一種記在 _dlg）
 let _dlg=null;
 function rerenderOpen(){ renderAll(); if($('mask').classList.contains('on')&&_dlg) _dlg(); }
@@ -709,13 +690,6 @@ function act(a,t){
   else if(a==='doc-off'){ const n=t.dataset.n, off=t.dataset.v==='1';
     if(!confirm(off?`停用「${n}」？\n\n門診表單和病房 App 不會再出現這個名字；以前的紀錄照算。`:`恢復「${n}」？`)) return;
     saveAdmin({op:'offDoc',name:n,off}); }
-  else if(a==='w-setup'){ wSetup=true; ui.cfg=true; renderAll(); const x=$('w-url'); if(x) x.focus(); }
-  else if(a==='w-cancel'){ wSetup=false; renderAll(); }
-  else if(a==='w-save') saveWrite();
-  else if(a==='w-copy'){
-    const url=`${ADMIN_URL}?openExternalBrowser=1#s=${SID}&w=${WID}`, done=()=>{ const o=t.textContent; t.textContent='✓ 已複製'; setTimeout(()=>{ t.textContent=o; },1500); };
-    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('請複製這條連結：',url)); else prompt('請複製這條連結：',url);
-  }
   else if(a==='link'){
     const id=sheetIdOf(($('link')||{}).value);
     if(!id){ alert('這看起來不是正確的連結，請把收到的整條連結完整貼上。'); return; }
@@ -735,8 +709,8 @@ document.addEventListener('input',e=>{ const t=e.target; if(edit&&t.dataset&&t.d
 window.addEventListener('beforeunload',e=>{ if(edit&&edit.dirty){ e.preventDefault(); e.returnValue=''; } });
 
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ $('mask').classList.remove('on'); _dlg=null; } if(e.key==='Enter'&&e.target.id==='link') act('link',e.target);
-  if(e.key==='Enter'&&e.target.id==='doc-new') act('doc-add',e.target); if(e.key==='Enter'&&e.target.id==='w-url') saveWrite(); if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.ed) edSave(); });
-window.addEventListener('hashchange',()=>{ const id=sheetIdOf(location.hash), w=writeIdOf(location.hash); if((id&&id!==SID)||(w&&w!==WID)) location.reload(); });
+  if(e.key==='Enter'&&e.target.id==='doc-new') act('doc-add',e.target); if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.ed) edSave(); });
+window.addEventListener('hashchange',()=>{ const id=sheetIdOf(location.hash), w=writeIdOf(location.hash); if((id&&id!==SID)||(w&&w!==WID_LINK)) location.reload(); });
 // 開著時每分鐘讀一次；切回來超過 15 秒沒讀過就補讀
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible') return;

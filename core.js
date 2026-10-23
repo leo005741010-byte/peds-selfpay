@@ -10,7 +10,7 @@
 // 本檔公開在網站上，所以不含任何姓名、價錢、試算表或表單網址：
 //   試算表代號由連結 #s=… 帶進來、存在這台裝置；其他全部從試算表讀。
 // ============================================================
-const APP_VER='2026.10.23c';
+const APP_VER='2026.10.23d';
 const LS_SHEET='pedsSelfpay_sheet';
 
 const $=id=>document.getElementById(id);
@@ -124,7 +124,7 @@ function parseDocs(t){
 function parseSys(t){
   const o={}; t.rows.forEach(r=>{ const k=normLabel(r[0]); if(k) o[k]=String(r[1]==null?'':r[1]).trim(); });
   return {form:o['病房表單']||'', eDate:o['欄位_日期']||'', eMrn:o['欄位_病歷號']||'', eItem:o['欄位_項目']||'', eDoc:o['欄位_醫師']||'', eVoid:o['欄位_作廢']||'',
-    clinic:o['門診表單']||'', itemsGid:o['項目分頁']||''};
+    clinic:o['門診表單']||'', itemsGid:o['項目分頁']||'', write:o['管理寫入']||''};
 }
 const itemNames=cfg=>{ const s={}, out=[]; cfg.items.forEach(x=>{ if(!s[x.name]){ s[x.name]=1; out.push(x.name); } }); return out; };
 // 某個月某個項目適用的那一列（適用起 ≤ 這個月、最新的那一列）；找不到＝null
