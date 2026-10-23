@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>/* iPhone 防放大（全 App 統一，主任 2026-10-17）：iPhone／iPad 點輸入框不自動放大，兩指放大照常；Android 不加 maximum-scale（會連兩指放大都鎖掉） */
+(function(){var m=document.querySelector('meta[name=viewport]');if(m&&(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))&&m.content.indexOf('maximum-scale')<0)m.content+=',maximum-scale=1';})();</script>
+<style>html,body,*{touch-action:manipulation}/* 連點兩下不放大，兩指放大照常 */</style>
+<meta name="robots" content="noindex,nofollow">
+<title>兒科自費統計</title>
+<script>
+// 帶 #s=… 的連結在 iPhone 上不掛 manifest：「加入主畫面」才會存下含 # 的完整網址（見 index.html 同一段的說明）
+(function(){
+  var ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(ios&&/[#&]s=/.test(location.hash)) return;
+  document.write('<link rel="manifest" href="manifest-admin.json">');
+})();
+</script>
+<meta name="theme-color" content="#1f6f8b">
+<link rel="icon" type="image/png" href="icon-admin-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon-admin.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="兒科自費統計">
+<script>
+if('serviceWorker' in navigator && location.protocol==='https:'){
+  const had=!!navigator.serviceWorker.controller; let reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(!had||reloading) return; reloading=true; location.reload(); });
+  window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{}); });
+}
+</script>
+<style>
+:root{--navy:#1f6f8b;--navy-dark:#16536a;--bg:#f2f7f9;--card:#fff;--line:#dce7ec;--txt:#1f2d3d;--mut:#6b7a8c;
+  --ok:#1f8a4c;--okbg:#e6f5ec;--warn:#a85800;--warnbg:#fff4e0;--bad:#c0392b;--badbg:#fdecea}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;line-height:1.55}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+header.top{background:var(--navy);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+header.top .wrap{padding-top:11px;padding-bottom:11px}
+header.top h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.5px}
+main.wrap{padding-top:16px;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+.foot{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;color:var(--mut);font-size:12.5px;margin-top:2px}
+#monthbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);box-shadow:0 -2px 12px rgba(18,53,90,.08);
+  display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+.mb-nav{font:inherit;font-size:22px;line-height:1;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--navy);cursor:pointer}
+.mb-nav:disabled{opacity:.3;cursor:default}
+.mb-cur{font:inherit;font-size:16px;font-weight:700;color:#fff;background:var(--navy);border:none;border-radius:999px;padding:9px 18px;min-width:180px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:8px}
+.mpick{position:fixed;left:0;right:0;bottom:calc(62px + env(safe-area-inset-bottom));z-index:31;display:none;justify-content:center;padding:0 12px}
+.mpick.on{display:flex}
+.mpick .box{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 34px rgba(18,53,90,.25);padding:12px 14px;width:100%;max-width:380px}
+.mpick .yr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:17px;color:var(--navy-dark)}
+.mpick .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mpick .m{font:inherit;font-size:15px;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--txt);cursor:pointer}
+.mpick .m:disabled{color:#c2cad4;background:#f7f9fb;cursor:default}
+.mpick .m.now{border-color:var(--navy)}
+.mpick .m.on{background:var(--navy);color:#fff;border-color:var(--navy);font-weight:700}
+.btn{font:inherit;font-size:13.5px;border:1px solid var(--navy);background:var(--navy);color:#fff;border-radius:7px;padding:6px 14px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block}
+.btn:hover{background:var(--navy-dark)}
+.btn.outline{background:#fff;color:var(--navy)}
+.btn.outline:hover{background:#eef5f8}
+.btn.mini{font-size:12.5px;padding:3px 10px;border-radius:6px}
+.btn.ghost{background:transparent;color:var(--mut);border-color:var(--line)}
+.btn.ghost:hover{background:#f1f4f8;color:var(--txt)}
+.btn:disabled{opacity:.5;cursor:default}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+.card>h2{font-size:16.5px;margin:0 0 4px;color:var(--navy-dark)}
+.mhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:4px 0 12px}
+.mhead h2{font-size:22px;margin:0;color:var(--navy-dark)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.tiles.big2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tile .l{font-size:12.5px;color:var(--mut)}
+.tile .v{font-size:25px;font-weight:700;color:var(--navy-dark);font-variant-numeric:tabular-nums;line-height:1.25}
+.tile .v small{font-size:13px;font-weight:400;color:var(--mut);margin-left:3px}
+.tile .s{font-size:12.5px;color:var(--mut)}
+.tile.big{background:#e7f3f7;border-color:#cde4ec;text-align:center;padding:14px}
+.tile.big .v{font-size:32px}
+.tile.big .l{font-size:14px;color:var(--navy-dark);font-weight:600}
+.tile.clk{cursor:pointer;position:relative}
+.tile.clk:hover{border-color:#8cc3d6;box-shadow:0 2px 10px rgba(31,111,139,.13)}
+.tile .tg{position:absolute;top:7px;right:10px;font-size:13px;opacity:.6}
+.today{font:inherit;width:100%;display:flex;align-items:center;gap:12px;flex-wrap:wrap;text-align:left;cursor:pointer;margin-bottom:12px;
+  background:var(--navy);color:#fff;border:none;border-radius:12px;padding:12px 16px}
+.today:hover{background:var(--navy-dark)}
+.today .tl{font-size:14px;font-weight:600}.today .tl small{font-weight:400;opacity:.75;margin-left:6px;font-size:12.5px}
+.today .tv{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}.today .tv small{font-size:13px;font-weight:400}
+.today .tr{margin-left:auto;font-size:13px;opacity:.9}
+.up{color:var(--ok);font-weight:700}.dn{color:var(--warn);font-weight:700}
+.est{display:inline-block;font-size:11px;font-weight:400;color:var(--mut);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.trend{display:block;width:100%;max-width:560px;height:auto;margin:6px auto 10px}
+.mixbar{display:flex;height:30px;border-radius:8px;overflow:hidden;margin:8px 0 8px;background:#e8edf3}
+.mixbar span{display:flex;align-items:center;justify-content:center;color:#fff;font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;min-width:3px}
+.mixbar span+span{border-left:2px solid #fff}
+.mixh{font-weight:700;color:var(--navy-dark);font-size:14px;margin:6px 0 0}
+.pr{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.pr i{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+.pr .pl{flex:1;min-width:0}.pr .pl small{color:var(--mut);margin-left:6px;font-size:12px}
+.pr .pv{color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr .pp{min-width:52px;text-align:right;font-variant-numeric:tabular-nums}
+.pr.z{opacity:.45}.pr.tot{border-bottom:none;font-weight:700}.pr.tot .pv{color:var(--txt)}
+details.sec>summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:16px;list-style:none;cursor:pointer;font-weight:700;color:var(--navy-dark)}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::before{content:'▸';color:var(--mut);font-size:15px;transition:transform .15s}
+details.sec[open]>summary::before{transform:rotate(90deg)}
+details.sec[open]>summary{margin-bottom:12px}
+details.sec>summary .sum-amt{font-variant-numeric:tabular-nums;color:var(--navy);font-weight:600}
+.note{border-radius:9px;padding:9px 13px;font-size:13.5px;margin-bottom:10px}
+.note.warn{background:var(--warnbg);color:var(--warn);border:1px solid #f3d9a4}
+.note.bad{background:var(--badbg);color:var(--bad);border:1px solid #f1b9b3}
+.note ul{margin:0;padding-left:20px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{background:#f3f8fa;color:var(--navy-dark);font-weight:700;font-size:13px}
+th.l,td.l{text-align:left}
+td.n{font-variant-numeric:tabular-nums}
+td.amt{font-weight:700;font-variant-numeric:tabular-nums}
+td.z{color:#b8c1cc}
+tr.tot td{font-weight:700;background:#f3f8fa;border-top:2px solid var(--line)}
+tr.cur td{background:#fff6e8}
+tr.clk{cursor:pointer}tr.clk:hover td{background:#eef6f9}
+.nm{font:inherit;background:none;border:none;padding:0;color:var(--navy);cursor:pointer;font-weight:600;border-bottom:1px dashed #94c2d2}
+.nm:hover{color:var(--navy-dark);border-bottom-style:solid}
+.tag{display:inline-block;font-size:12px;border-radius:6px;padding:1px 7px;font-weight:700;background:#eef1f4;color:var(--mut)}
+.mut{color:var(--mut)}
+.sub2{font-size:12.5px;color:var(--mut);margin-top:8px}
+.rec{display:flex;align-items:center;gap:4px 10px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.rec .dd{font-variant-numeric:tabular-nums;min-width:40px;color:var(--mut)}
+.rec .src{font-size:12px;font-weight:700;border-radius:5px;padding:0 6px;color:#fff}
+.rec .src.o{background:#1f6f8b}.rec .src.w{background:#e07b39}
+.rec .m{font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:1px}
+.rec .i{flex:1;min-width:130px}
+.rec .dc{color:var(--txt)}
+.rec .a{font-variant-numeric:tabular-nums;min-width:60px;text-align:right}
+.rec.void{opacity:.5}.rec.void .i{text-decoration:line-through}
+.dupw{color:var(--warn);font-size:12px}
+.mask{position:fixed;inset:0;background:rgba(18,53,90,.45);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:40px 12px;overflow:auto}
+.mask.on{display:flex}
+.dlg{background:#fff;border-radius:14px;max-width:820px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.dlg h2{margin:0 0 4px;font-size:18px;color:var(--navy-dark);display:flex;align-items:center;gap:8px}
+.dlg h2 .btn{margin-left:auto}
+.dlg .cumh{font-weight:700;color:var(--navy-dark);font-size:14.5px;margin:12px 0 0}
+.dlg .cumh small{font-weight:400;color:var(--mut);margin-left:6px}
+.empty{text-align:center;color:var(--mut);padding:40px 10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+input[type=text]{font:inherit;font-size:15px;border:1px solid #c5d3db;border-radius:7px;padding:6px 10px}
+@media (max-width:640px){
+  .card{padding:12px}.tile .v{font-size:21px}th,td{padding:6px 7px}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .tiles:not(.big2) .tile:last-child:nth-child(odd){grid-column:1/-1}
+  .tile{padding:10px 12px}.tile.big{padding:12px 8px}.tile.big .v{font-size:26px}
+  /* 手機：表格改成一列一塊（名稱＋PF，下面一行小字是各項件數與金額），不用左右捲 */
+  table.ppl,table.ppl tbody{display:block}
+  table.ppl thead{display:none}
+  table.ppl tr{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;padding:10px 2px;border-bottom:1px solid var(--line)}
+  table.ppl td{display:block;border:none;padding:0;text-align:left;white-space:normal;background:none!important}
+  table.ppl td.nmc{order:1;flex:1 1 auto;font-size:16px}
+  table.ppl td.amt{order:2;margin-left:auto;font-size:16px}
+  table.ppl td.amt::before{content:attr(data-l) ' ';font-size:12px;font-weight:400;color:var(--mut)}
+  table.ppl tr::before{content:'';order:3;flex-basis:100%;height:0}
+  table.ppl td.q,table.ppl td.sub{order:4;font-size:12.5px;color:var(--mut)}
+  table.ppl td.q::before,table.ppl td.sub::before{content:attr(data-l) ' '}
+  table.ppl td.z{display:none}
+  table.ppl tr.tot{background:#f3f8fa;border-radius:8px;padding:10px 8px;border-bottom:none}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><h1>兒科自費統計</h1></div></header>
+<main class="wrap">
+  <div id="alerts"></div>
+  <div id="month-view"></div>
+  <div class="foot"><span id="status"></span><button class="btn mini ghost" id="btn-refresh" data-act="refresh">🔄 更新</button></div>
+</main>
+<div class="mask" id="mask"><div class="dlg" id="dlg"></div></div>
+<nav id="monthbar"></nav>
+<div class="mpick" id="mpick"></div>
+<script>
+if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]mock\b/.test(location.search)) document.write('<script src="_mock.js"><\/script>');
+</script>
+<script src="core.js"></script>
+<script>
+'use strict';
+// ============================================================
+// 管理頁：讀試算表的門診＋病房兩個分頁，每月統計件數、金額（件數×價錢）、PF（價錢×PF 比例），
+// 依開單醫師、來源、項目分開看。項目與價錢在試算表「項目」分頁改（某個月起調價：加一列、填適用起）。
+// 開著時每分鐘讀一次試算表。
+// ============================================================
+const LS_CACHE='pedsSelfpay_admin';
+const SID=getSheetId();
+let D=null, checked=0, busy=false, fail=null, delta=null;
+let cur=null, pickOpen=false, pickYear=null, _mbKeys=[];
+const ui={};          // 卡片展開狀態只記在這次開啟（每次打開都收起來）
+let showVoid=false, _calc={}, _months=new Set();
+const busyKeys={};    // 剛按了刪除／復原、還在等試算表出現的：{key:時間}
+(function loadCache(){ try{ const c=JSON.parse(localStorage.getItem(LS_CACHE)||'null'); if(c&&c.sid===SID){ D={cfg:c.cfg,recs:c.recs}; checked=c.checked||0; prep(); } }catch(e){} })();
+function saveCache(){ try{ localStorage.setItem(LS_CACHE,JSON.stringify({sid:SID,cfg:D.cfg,recs:D.recs,checked})); }catch(e){} }
+
+// ---------- 計算 ----------
+// 每一筆的金額＝那個月適用的價錢；PF＝價錢×PF 比例（四捨五入到元）
+function prep(){
+  _calc={}; _months=new Set();
+  D.recs.forEach(r=>{ const p=priceOf(D.cfg,r.item,r.k); r.known=!!p; r.amt=p?p.price:0; r.pf=p?Math.round(p.price*p.pf):0; if(!r.void) _months.add(r.k); });
+}
+const hasMonth=k=>_months.has(k);
+function calcMonth(k){
+  if(_calc[k]) return _calc[k];
+  const z=()=>({n:0,amt:0,pf:0,item:{}}), add=(o,r)=>{ o.n++; o.amt+=r.amt; o.pf+=r.pf; o.item[r.item]=(o.item[r.item]||0)+1; };
+  const c={k,rows:[],n:0,amt:0,pf:0,item:{},doc:{},src:{'門診':z(),'病房':z()},noPrice:{},oddDoc:{},noDoc:0,noItem:0,badMrn:0,dups:new Set(),voided:[]}, seen={};
+  D.recs.forEach(r=>{
+    if(r.k!==k) return;
+    if(r.void){ c.voided.push(r); return; }
+    c.rows.push(r); c.n++; c.amt+=r.amt; c.pf+=r.pf;
+    const it=c.item[r.item]||(c.item[r.item]={n:0,amt:0,pf:0,src:{}}); it.n++; it.amt+=r.amt; it.pf+=r.pf; it.src[r.src]=(it.src[r.src]||0)+1;
+    add(c.doc[r.doc]||(c.doc[r.doc]=z()),r); add(c.src[r.src]||(c.src[r.src]=z()),r);
+    if(!r.item) c.noItem++; else if(!r.known) c.noPrice[r.item]=(c.noPrice[r.item]||0)+1;
+    if(!r.doc) c.noDoc++; else if(D.cfg.docs.length&&!D.cfg.docs.includes(r.doc)) c.oddDoc[r.doc]=(c.oddDoc[r.doc]||0)+1;
+    if(!/^\d{3}$/.test(r.mrn)) c.badMrn++;
+    const dk=`${r.d}|${r.mrn}|${r.item}`; if(seen[dk]){ c.dups.add(seen[dk]); c.dups.add(r.key); } else seen[dk]=r.key;   // 同一天、同病歷號末3碼、同項目
+  });
+  return _calc[k]=c;
+}
+// 項目照「項目」分頁的順序；分頁上沒有的排最後
+function itemOrder(obj){ const names=itemNames(D.cfg); return names.filter(n=>obj[n]).concat(Object.keys(obj).filter(n=>!names.includes(n))); }
+function docOrder(obj){ const ds=D.cfg.docs; return ds.filter(n=>obj[n]).concat(Object.keys(obj).filter(n=>!ds.includes(n)).sort((a,b)=>(a==='')-(b==='')||a.localeCompare(b,'zh-Hant'))); }
+// 月份：有紀錄的月份＋這個月
+const allKeys=()=>[...new Set([..._months,todayKey()])].sort();
+// 折線圖的月份：從第一個有紀錄的月份連續到這個月（中間沒紀錄的月份是 0）
+function trendKeys(){ const ks=allKeys(); if(!ks.length) return []; const out=[]; for(let k=ks[0];k<=ks[ks.length-1];k=shiftKey(k,1)) out.push(k); return out; }
+
+// ---------- 顏色 ----------
+const ICOLOR=['#1f6f8b','#e07b39','#2e9e6b','#8e6bb5','#5b9bd5','#c9a34a','#d16a8a','#4fb3bf'];
+const PCOLOR=['#1a4a7a','#e2574c','#2e9e6b','#c9a34a','#8e6bb5','#4fb3bf','#d16a8a','#6b8e23'];
+const SCOLOR={'門診':'#1f6f8b','病房':'#e07b39'};
+const hashI=s=>[...String(s)].reduce((t,ch)=>t+ch.charCodeAt(0),0);
+function itemColor(n){ const i=itemNames(D.cfg).indexOf(n); return i<0?'#9aa7b4':ICOLOR[i%ICOLOR.length]; }
+function docColor(n){ if(!n) return '#b8c2cc'; let i=D.cfg.docs.indexOf(n); if(i<0) i=D.cfg.docs.length+hashI(n); return PCOLOR[i%PCOLOR.length]; }
+
+// ---------- 讀試算表 ----------
+async function refresh(silent){
+  if(!SID||busy) return;
+  busy=true; renderStatus();
+  try{
+    const r=await loadSheet(SID,['門診','病房']);
+    const before=D?D.recs.filter(x=>!x.void):[], cnt={}; before.forEach(x=>cnt[x.k]=(cnt[x.k]||0)+1);
+    const sigOld=D?JSON.stringify([D.cfg,D.recs]):'';
+    D={cfg:r.cfg,recs:r.recs}; prep(); checked=Date.now(); fail=null; saveCache();
+    const changed=JSON.stringify([D.cfg,D.recs])!==sigOld;
+    if(before.length||sigOld){ const now={}; D.recs.filter(x=>!x.void).forEach(x=>now[x.k]=(now[x.k]||0)+1);
+      const dl=[...new Set([...Object.keys(cnt),...Object.keys(now)])].sort().map(k=>{ const d=(now[k]||0)-(cnt[k]||0); return d?`${Number(k.split('-')[1])}月 ${d>0?'+':''}${d} 件`:''; }).filter(Boolean).join('、');
+      if(dl) delta={txt:dl,at:Date.now()}; }
+    Object.keys(busyKeys).forEach(k=>{ const x=D.recs.find(y=>y.key===k); if(!x||x.void===busyKeys[k].v||Date.now()-busyKeys[k].at>60000) delete busyKeys[k]; });
+    busy=false;
+    if(changed||!silent) renderAll(); else { renderStatus(); renderAlerts(); }
+  }catch(e){
+    busy=false; fail={at:Date.now(),msg:(e&&e.message)||String(e)};
+    renderStatus(); renderAlerts(); if(!D) renderAll();
+    if(!silent) alert('讀取試算表失敗：'+fail.msg+(D?'\n\n畫面上是上次讀到的資料。':''));
+  }
+}
+
+// ---------- 畫面 ----------
+function renderStatus(){
+  $('btn-refresh').disabled=busy||!SID;
+  $('status').textContent=busy?'讀取試算表中…':fail?`⚠ ${hm(fail.at)} 讀取失敗`+(checked?`，顯示 ${hm(checked)} 的資料`:''):
+    checked?`試算表已同步 ${hm(checked)}`+(delta&&Date.now()-delta.at<10*60*1000?`　新進：${delta.txt}`:''):'';
+}
+function renderAlerts(){
+  const a=[];
+  if(fail&&D) a.push(`<div class="note bad">讀不到試算表：${esc(fail.msg)}（畫面上是 ${hm(checked)} 的資料）</div>`);
+  $('alerts').innerHTML=a.join('');
+}
+function renderAll(){
+  renderAlerts(); renderStatus();
+  if(!SID||!D){ renderSetup(); renderMonthBar([]); return; }
+  const ks=allKeys(); if(!cur||!ks.includes(cur)) cur=ks.includes(todayKey())?todayKey():ks[ks.length-1];
+  renderMonth(); renderMonthBar(ks);
+}
+function renderSetup(){
+  $('month-view').innerHTML=!SID?`<div class="card"><h2>請用連結打開</h2>
+    <div class="row"><input type="text" id="link" placeholder="貼上連結" autocomplete="off" style="flex:1;min-width:200px"><button class="btn" data-act="link">開啟</button></div></div>`:
+    `<div class="card empty">${fail?'讀不到試算表：'+esc(fail.msg):'讀取試算表中…'}</div>`;
+}
+function renderMonthBar(ks){
+  const bar=$('monthbar'), pk=$('mpick'); _mbKeys=ks;
+  if(!ks.length||!cur){ bar.style.display='none'; pk.classList.remove('on'); pickOpen=false; return; }
+  bar.style.display='';
+  const i=ks.indexOf(cur);
+  bar.innerHTML=`<button class="mb-nav" data-act="mstep" data-d="-1" aria-label="上個月"${i>0?'':' disabled'}>‹</button>
+    <button class="mb-cur" data-act="mpick"><span>📅</span>${keyLabel(cur)}</button>
+    <button class="mb-nav" data-act="mstep" data-d="1" aria-label="下個月"${i<ks.length-1?'':' disabled'}>›</button>`;
+  if(!pickOpen){ pk.classList.remove('on'); return; }
+  const years=[...new Set(ks.map(k=>+k.split('-')[0]))];
+  if(pickYear==null||!years.includes(pickYear)) pickYear=+cur.split('-')[0];
+  const yi=years.indexOf(pickYear), now=todayKey();
+  pk.innerHTML=`<div class="box"><div class="yr"><button class="mb-nav" data-act="myear" data-d="-1"${yi>0?'':' disabled'}>‹</button><b>${pickYear}年</b><button class="mb-nav" data-act="myear" data-d="1"${yi<years.length-1?'':' disabled'}>›</button></div>
+    <div class="grid">${[...Array(12)].map((_,j)=>{ const k=`${pickYear}-${pad(j+1)}`, has=ks.includes(k);
+      return `<button class="m${k===cur?' on':''}${k===now?' now':''}" ${has?`data-act="month" data-k="${k}"`:'disabled'}>${j+1}月</button>`; }).join('')}</div></div>`;
+  pk.classList.add('on');
+}
+function switchMonth(k){ if(!k||k===cur){ pickOpen=false; renderAll(); return; } cur=k; pickOpen=false; renderAll(); window.scrollTo({top:0}); }
+
+function monthWarnings(c){
+  const w=[];
+  const np=Object.keys(c.noPrice); if(np.length) w.push(`項目「${np.join('、')}」在試算表「項目」分頁找不到（${sumVals(c.noPrice)} 件以 0 元計），請到「項目」分頁加上，或確認是不是打錯字。`);
+  const od=Object.keys(c.oddDoc); if(od.length) w.push(`醫師「${od.join('、')}」不在試算表「醫師」分頁的名單上（${sumVals(c.oddDoc)} 件），請確認是不是打錯字。`);
+  if(c.noDoc) w.push(`有 ${c.noDoc} 筆沒填開單醫師。`);
+  if(c.noItem) w.push(`有 ${c.noItem} 筆沒填項目。`);
+  if(c.badMrn) w.push(`有 ${c.badMrn} 筆的病歷號末3碼不是 3 位數字。`);
+  if(c.dups.size) w.push(`有 ${c.dups.size} 筆可能重複登錄（同一天、同病歷號末3碼、同項目），在「明細」標 ⚠。`);
+  return w;
+}
+const unitOf=m=>m==='n'?'件':'元';
+function renderMonth(){
+  const c=calcMonth(cur), el=$('month-view'), isNow=cur===todayKey();
+  let h=`<div class="mhead"><h2>${keyLabel(cur)}</h2></div>`;
+  const w=monthWarnings(c); if(w.length) h+=`<div class="note warn"><ul>${w.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  if(isNow){ const t=todayRows(), ta=t.reduce((s,r)=>s+r.amt,0), d=new Date();
+    h+=`<button class="today" data-act="today"><span class="tl">今日增加的金額<small>${d.getMonth()+1}/${d.getDate()}</small></span><span class="tv">${fmt(ta)}<small> 元</small></span>
+      <span class="tr">${t.length?`${t.length} 件　看明細 ›`:'今天還沒有新增'}</span></button>`; }
+  const pj=m=>{ const x=projHtml(m,cur); return x?`<div class="s">${x}</div>`:''; };
+  h+=`<div class="tiles big2">
+    <div class="tile big clk" data-act="trend" data-m="amt" role="button"><span class="tg">📈</span><div class="v">${fmt(c.amt)}<small>元</small></div><div class="l">總金額</div><div class="s">${vsPrevHtml('amt',cur)}</div>${pj('amt')}</div>
+    <div class="tile big clk" data-act="trend" data-m="n" role="button"><span class="tg">📈</span><div class="v">${c.n}<small>件</small></div><div class="l">總件數</div><div class="s">${vsPrevHtml('n',cur)}</div>${pj('n')}
+      <div class="s">門診 ${c.src['門診'].n}・病房 ${c.src['病房'].n}</div></div>
+  </div>`;
+  const io=itemOrder(c.item);
+  const mix=mixHtml(io.map(n=>({label:n,note:c.item[n].n+' 件',v:c.item[n].amt,c:itemColor(n)})),'元');
+  if(mix) h+=`<div class="card"><h2>金額的組成</h2>${mix}</div>`;
+  const ds=docOrder(c.doc);
+  h+=`<div class="tiles">
+    <div class="tile clk" data-act="trend" data-m="pf" role="button"><span class="tg">📈</span><div class="l">PF 合計</div><div class="v">${fmt(c.pf)}<small>元</small></div>
+      <div class="s">${vsPrevHtml('pf',cur)}</div>${ds.length?`<div class="s">${ds.map(n=>`${esc(n||'未填')} ${fmt(c.doc[n].pf)}`).join('・')}</div>`:''}</div>
+    <div class="tile clk" data-act="trend" data-m="opd" role="button"><span class="tg">📈</span><div class="l">門診金額</div><div class="v">${fmt(c.src['門診'].amt)}<small>元</small></div><div class="s">${c.src['門診'].n} 件・${vsPrevHtml('opd',cur)}</div></div>
+    <div class="tile clk" data-act="trend" data-m="ward" role="button"><span class="tg">📈</span><div class="l">病房金額</div><div class="v">${fmt(c.src['病房'].amt)}<small>元</small></div><div class="s">${c.src['病房'].n} 件・${vsPrevHtml('ward',cur)}</div></div>
+  </div>`;
+  const sec=(id,title,right,body)=>`<details class="card sec" data-sec="${id}"${ui[id]?' open':''}><summary><span>${title}</span><span class="sum-amt">${right}</span></summary>${body}</details>`;
+  const qtd=(n,it)=>n?`<td class="n q" data-l="${esc(shortItem(it))}">${n}</td>`:'<td class="z q">0</td>';
+  const ihd=io.map(n=>`<th title="${esc(n)}">${esc(shortItem(n))}</th>`).join('');
+  // 各醫師
+  const docMix=mixHtml(ds.filter(n=>c.doc[n].pf>0).map(n=>({label:n||'（未填醫師）',note:c.doc[n].n+' 件',v:c.doc[n].pf,c:docColor(n)})),'元');
+  h+=sec('doc','各醫師',`PF ${fmt(c.pf)} 元`,(docMix?`<div class="mixh">PF 的占比</div>${docMix}<div class="mixh" style="margin-top:12px">明細</div>`:'')+
+    `<div class="tw"><table class="ppl"><thead><tr><th class="l">開單醫師</th>${ihd}<th>件數</th><th>金額</th><th>PF</th></tr></thead><tbody>`+
+    (ds.map(n=>{ const o=c.doc[n]; return `<tr><td class="l nmc"><button class="nm" data-act="doc" data-k="${esc(n)}">${esc(n||'（未填醫師）')}</button></td>${io.map(it=>qtd(o.item[it],it)).join('')}`+
+      `<td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="金額">${fmt(o.amt)}</td><td class="amt" data-l="PF">${fmt(o.pf)}</td></tr>`; }).join('')||`<tr><td class="l mut" colspan="${io.length+4}">這個月還沒有紀錄</td></tr>`)+
+    (ds.length?`<tr class="tot"><td class="l nmc">合計</td>${io.map(it=>qtd(c.item[it].n,it)).join('')}<td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="金額">${fmt(c.amt)}</td><td class="amt" data-l="PF">${fmt(c.pf)}</td></tr>`:'')+
+    '</tbody></table></div>');
+  // 門診／病房
+  const srcMix=mixHtml(['門診','病房'].map(s=>({label:s,note:c.src[s].n+' 件',v:c.src[s].amt,c:SCOLOR[s]})),'元');
+  h+=sec('src','門診／病房',`門診 ${c.src['門診'].n}・病房 ${c.src['病房'].n} 件`,(srcMix?`<div class="mixh">金額的占比</div>${srcMix}<div class="mixh" style="margin-top:12px">明細</div>`:'')+
+    `<div class="tw"><table class="ppl"><thead><tr><th class="l">來源</th>${ihd}<th>件數</th><th>PF</th><th>金額</th></tr></thead><tbody>`+
+    ['門診','病房'].map(s=>{ const o=c.src[s]; return `<tr><td class="l nmc"><button class="nm" data-act="src" data-k="${s}">${s}</button></td>${io.map(it=>qtd(o.item[it],it)).join('')}`+
+      `<td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; }).join('')+
+    `<tr class="tot"><td class="l nmc">合計</td>${io.map(it=>qtd(c.item[it].n,it)).join('')}<td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="PF">${fmt(c.pf)}</td><td class="amt" data-l="金額">${fmt(c.amt)}</td></tr></tbody></table></div>`);
+  // 各項目
+  h+=sec('item','各項目',`${c.n} 件`,`<div class="tw"><table class="ppl"><thead><tr><th class="l">項目</th><th>價錢</th><th>門診</th><th>病房</th><th>件數</th><th>PF</th><th>金額</th></tr></thead><tbody>`+
+    (io.map(n=>{ const o=c.item[n], p=priceOf(D.cfg,n,cur); return `<tr><td class="l nmc"><b>${esc(n)}</b></td><td class="n sub" data-l="價錢">${p?fmt(p.price):'—'}</td>`+
+      `<td class="n sub" data-l="門診">${o.src['門診']||0}</td><td class="n sub" data-l="病房">${o.src['病房']||0}</td><td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; }).join('')||'<tr><td class="l mut" colspan="7">這個月還沒有紀錄</td></tr>')+
+    (io.length?`<tr class="tot"><td class="l nmc">合計</td><td class="n sub"></td><td class="n sub" data-l="門診">${c.src['門診'].n}</td><td class="n sub" data-l="病房">${c.src['病房'].n}</td><td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="PF">${fmt(c.pf)}</td><td class="amt" data-l="金額">${fmt(c.amt)}</td></tr>`:'')+
+    '</tbody></table></div>');
+  // 明細
+  const rows=c.rows.concat(showVoid?c.voided:[]).sort((a,b)=>b.d-a.d||b.ts-a.ts);
+  h+=sec('rows','明細',`${c.rows.length} 筆`,(rows.map(r=>recRow(r,c)).join('')||'<div class="mut">這個月還沒有紀錄</div>')+
+    (c.voided.length?`<div class="row"><button class="btn mini ghost" data-act="showvoid">${showVoid?'不顯示已刪除的':`顯示已刪除的 ${c.voided.length} 筆`}</button></div>`:''));
+  // 各月合計（目前這一年）
+  h+=sec('year','各月合計',`${cur.split('-')[0]}年`,yearHtml());
+  // 項目與價錢（在試算表改）
+  h+=sec('cfg','項目與價錢',`${activeItems(D.cfg).length} 項`,cfgHtml());
+  el.innerHTML=h;
+}
+function recRow(r,c){
+  const b=busyKeys[r.key];
+  return `<div class="rec${r.void?' void':''}"><span class="dd">${r.md}</span><span class="src ${r.src==='門診'?'o':'w'}">${r.src}</span><span class="m">${esc(r.mrn)}</span>`+
+    `<span class="i">${esc(r.item)}${c&&c.dups.has(r.key)?' <b class="dupw" title="同一天、同病歷號末3碼、同項目有兩筆以上">⚠ 重複？</b>':''}</span><span class="dc">${esc(r.doc)||'<span style="color:var(--bad)">未填</span>'}</span><span class="a">${fmt(r.amt)}</span>`+
+    (b?'<span class="mut">處理中…</span>':r.void?`<button class="btn mini outline" data-act="restore" data-k="${esc(r.key)}">復原</button>`:`<button class="btn mini ghost" data-act="del" data-k="${esc(r.key)}">刪除</button>`)+'</div>';
+}
+function yearHtml(){
+  const y=cur.split('-')[0], ks=trendKeys().filter(k=>k.startsWith(y+'-'));
+  if(!ks.length) return '<div class="mut">還沒有資料</div>';
+  const t={n:0,amt:0,pf:0,o:0,w:0};
+  const rows=ks.map(k=>{ const c=calcMonth(k); t.n+=c.n; t.amt+=c.amt; t.pf+=c.pf; t.o+=c.src['門診'].n; t.w+=c.src['病房'].n;
+    return `<tr class="clk${k===cur?' cur':''}" data-act="month" data-k="${k}"><td class="l">${Number(k.split('-')[1])}月</td><td class="n">${c.n}</td><td class="n">${c.src['門診'].n}</td><td class="n">${c.src['病房'].n}</td><td class="n">${fmt(c.amt)}</td><td class="amt">${fmt(c.pf)}</td></tr>`; }).join('');
+  return `<div class="tw"><table><thead><tr><th class="l">月份</th><th>件數</th><th>門診</th><th>病房</th><th>金額</th><th>PF</th></tr></thead><tbody>${rows}
+    <tr class="tot"><td class="l">合計</td><td class="n">${t.n}</td><td class="n">${t.o}</td><td class="n">${t.w}</td><td class="n">${fmt(t.amt)}</td><td class="amt">${fmt(t.pf)}</td></tr></tbody></table></div>`;
+}
+function cfgHtml(){
+  const sys=D.cfg.sys, edit=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(SID)}/edit${sys.itemsGid?'#gid='+encodeURIComponent(sys.itemsGid):''}`;
+  const rows=D.cfg.items.slice().sort((a,b)=>a.order-b.order).map(x=>`<tr><td class="l">${esc(x.name)}${x.off?' <span class="tag">停用</span>':''}</td><td class="n">${fmt(x.price)}</td>`+
+    `<td class="n">${Math.round(x.pf*1000)/10}%</td><td class="n">${fmt(Math.round(x.price*x.pf))}</td><td class="n">${x.from?keyLabel(x.from)+'起':'—'}</td></tr>`).join('');
+  return `<div class="tw"><table><thead><tr><th class="l">項目</th><th>價錢</th><th>PF 比例</th><th>PF</th><th>適用起</th></tr></thead><tbody>${rows||'<tr><td class="l mut" colspan="5">試算表「項目」分頁是空的</td></tr>'}</tbody></table></div>
+    <div class="row"><a class="btn outline" href="${esc(edit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
+}
+
+// ---------- 組成橫條 ----------
+// 一條橫的長方形，各部分照占比分色；下面由大到小列出數值與百分比。parts=[{label,note,v,c}]
+function mixHtml(parts,unit){
+  const list=parts.slice().sort((x,y)=>y.v-x.v), tot=list.reduce((t,x)=>t+Math.max(0,x.v),0);
+  if(!tot) return '';
+  const pc=x=>x.v/tot*100;
+  return `<div class="mixbar" role="img">${list.filter(x=>x.v>0).map(x=>`<span style="flex:${x.v} 0 0;background:${x.c}" title="${esc(x.label)} ${pc(x).toFixed(1)}%">${pc(x)>=9?Math.round(pc(x))+'%':''}</span>`).join('')}</div>
+    <div>${list.map(x=>`<div class="pr${x.v>0?'':' z'}"><i style="background:${x.c}"></i><span class="pl">${esc(x.label)}${x.note?`<small>${esc(x.note)}</small>`:''}</span><span class="pv">${fmt(x.v)} ${unit}</span><b class="pp">${pc(x).toFixed(1)}%</b></div>`).join('')}
+      <div class="pr tot"><i></i><span class="pl">合計</span><span class="pv">${fmt(tot)} ${unit}</span><b class="pp">100%</b></div></div>`;
+}
+
+// ---------- 趨勢（點數字磚跳出折線圖）----------
+// val＝每一筆算多少；who＝視窗最上面「這個數字各人占多少」怎麼拆
+const TREND={
+  amt: {title:'總金額',   unit:'元',val:r=>r.amt,who:'docAmt',daily:1},
+  n:   {title:'總件數',   unit:'件',val:()=>1,who:'item',daily:1},
+  pf:  {title:'PF 合計',  unit:'元',val:r=>r.pf,who:'docPf'},
+  opd: {title:'門診金額', unit:'元',val:r=>r.src==='門診'?r.amt:0,who:'docAmt',src:'門診'},
+  ward:{title:'病房金額', unit:'元',val:r=>r.src==='病房'?r.amt:0,who:'docAmt',src:'病房'},
+};
+function trendDef(m){
+  if(TREND[m]) return TREND[m];
+  if(/^d:/.test(m)){ const n=m.slice(2); return {title:`${n||'（未填醫師）'}・PF`,unit:'元',val:r=>r.doc===n?r.pf:0}; }
+  return null;
+}
+const monthVal=(m,k)=>{ const T=trendDef(m); return calcMonth(k).rows.reduce((t,r)=>t+T.val(r),0); };
+const pctVs=(v,pv)=>pv?(v-pv)/Math.abs(pv)*100:null;
+const pctHtml=d=>`<span class="${d>=0?'up':'dn'}">${d>=0?'▲ +':'▼ '}${d.toFixed(1)}%</span>`;
+// 某個月每天各加了多少：當月算到今天，其他月份算到月底；日期在今天之後的不算（late）
+function dailySums(k,val){
+  const [yy,mm]=k.split('-').map(Number), isNow=k===todayKey(), DD=isNow?new Date().getDate():new Date(yy+1911,mm,0).getDate(), sum=new Array(DD+1).fill(0); let late=0;
+  calcMonth(k).rows.forEach(r=>{ if(r.d>DD){ late++; return; } sum[Math.max(1,r.d)]+=val(r); });
+  return {sum,D:DD,mm,isNow,late};
+}
+const mtd=(m,k,d)=>{ const s=dailySums(k,trendDef(m).val); let t=0; for(let i=1;i<=Math.min(d,s.D);i++) t+=s.sum[i]; return t; };
+const firstKey=()=>{ const ks=[..._months].sort(); return ks[0]||todayKey(); };
+// 這個月還沒過完：比「上月同期」（上個月 1 日到同一天）。回傳 {pv}；不是當月回 null
+function prevSamePeriod(m,key){
+  if(key!==todayKey()) return null;
+  const pk=shiftKey(key,-1); if(pk<firstKey()) return {pv:null};
+  return {pv:mtd(m,pk,new Date().getDate())};
+}
+function vsPrevHtml(m,key){
+  const sp=prevSamePeriod(m,key);
+  if(sp){ const d=sp.pv==null?null:pctVs(monthVal(m,key),sp.pv); return d==null?'沒有上個月同期的資料可比':'較上月同期 '+pctHtml(d); }
+  const pk=shiftKey(key,-1), d=pk<firstKey()?null:pctVs(monthVal(m,key),monthVal(m,pk));
+  return d==null?'沒有上個月的資料可比':'較上月 '+pctHtml(d);
+}
+// 預估全月＝目前累計 ÷ 已過天數 × 這個月的天數（過了 3 天才估；數字不寫到個位數）
+function projHtml(m,key){
+  if(key!==todayKey()) return '';
+  const [y,mo]=key.split('-').map(Number), dim=new Date(y+1911,mo,0).getDate(), DD=new Date().getDate();
+  if(DD>=dim||DD<3) return '';
+  const proj=monthVal(m,key)*dim/DD, pk=shiftKey(key,-1), d=pk<firstKey()?null:pctVs(proj,monthVal(m,pk));
+  const shown=proj>=10000?Math.round(proj/1000)*1000:proj>=100?Math.round(proj/10)*10:Math.round(proj);
+  return `預估全月約 ${fmt(shown)}${d==null?'':'，較上月 '+pctHtml(d)}`;
+}
+// 折線圖（純 SVG）。pts=[{k:'115-10',v}]，curKey 那一點用橘色；day＝月份數字時是逐日模式（k 是幾日）
+function lineSvg(pts,curKey,day){
+  const n=pts.length, nice=m=>{ const raw=m/4, e=Math.pow(10,Math.floor(Math.log10(raw)));   // 縱軸分四格，每格取剛好夠大的整齊整數（最大 10,197 → 上限 12,000）
+    return 4*([1,1.25,1.5,2,2.5,3,4,5,6,8,10].map(f=>f*e).find(v=>v>=raw&&Math.abs(v-Math.round(v))<1e-9)||Math.ceil(raw)); };
+  const all=pts.map(p=>p.v), max=Math.max(0,...all), min=Math.min(0,...all);
+  const lo=min<0?-nice(-min):0, hi=max>0?nice(max):(lo<0?0:4);
+  const W=400,H=230,L=lo<0?60:56,R=22,B=38, step=n>1?(W-L-R)/(n-1):W, T=n>6?40:26;
+  const x=i=>n===1?L+(W-L-R)/2:L+step*i, y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+  let g='';
+  for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4, yy=y(v);
+    g+=`<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="${v===0&&lo<0?'#9aa7b8':'#dce7ec'}" stroke-width="1"/><text x="${L-6}" y="${yy+4}" text-anchor="end" font-size="10.5" fill="#6b7a8c">${fmt(v)}</text>`; }
+  for(let i=1;i<n;i++) g+=`<line x1="${x(i-1)}" y1="${y(pts[i-1].v)}" x2="${x(i)}" y2="${y(pts[i].v)}" stroke="#1f6f8b" stroke-width="2.5" stroke-linecap="round"/>`;
+  const boxes=[], labelY=(x0,cy,w)=>{   // 點上的數字：會蓋到前面的數字時改放更高或點的下方
+    for(const dy of [-10,-23,21,-36,34]){ const ty=cy+dy, b=[x0-2,ty-10,x0+w+2,ty+3];
+      if(ty<11||ty>H-B-3||boxes.some(o=>b[0]<o[2]&&b[2]>o[0]&&b[1]<o[3]&&b[3]>o[1])) continue;
+      boxes.push(b); return ty; }
+    return cy-10; };
+  let lastY=null;
+  pts.forEach((p,i)=>{ const [yy,mm]=day?[0,0]:p.k.split('-').map(Number), on=p.k===curKey, show=n<=(day?8:12)||on||i===n-1||!!p.lab;
+    const tick=day?(n<=16||i===0||i===n-1||((i+1)%5===0&&n-1-i>1)?p.k:''):mm+'月';
+    const anc=n>1&&i===0?'start':n>1&&i===n-1?'end':'middle', lx=x(i)+(anc==='start'?4:anc==='end'?-4:0), lw=fmt(p.v).length*6.4;
+    const ly=show?labelY(anc==='start'?lx:anc==='end'?lx-lw:lx-lw/2,y(p.v),lw):0;
+    g+=(day&&n>16&&!on&&i!==n-1&&!p.lab?'':`<circle cx="${x(i)}" cy="${y(p.v)}" r="${on?5.5:4}" fill="${on?'#f2a541':'#1f6f8b'}" stroke="#fff" stroke-width="1.5"/>`)+
+      (show?`<text x="${lx}" y="${ly}" text-anchor="${anc}" font-size="11" font-weight="700" fill="${on?'#a85800':'#16536a'}" stroke="#fff" stroke-width="3" paint-order="stroke">${fmt(p.v)}</text>`:'')+
+      (tick!==''?`<text x="${x(i)}" y="${H-B+16}" text-anchor="middle" font-size="11" fill="#1f2d3d">${tick}</text>`:'')+
+      (day?(i===0?`<text x="${x(i)}" y="${H-B+30}" text-anchor="middle" font-size="10" fill="#6b7a8c">${day}月</text>`:''):
+       yy!==lastY?`<text x="${x(i)}" y="${H-B+30}" text-anchor="middle" font-size="10" fill="#6b7a8c">${yy}年</text>`:'');
+    lastY=yy; });
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+}
+// 逐日累進（＋總金額／總件數另有「逐日，不累計」）：跟著目前看的月份走
+function cumHtml(m){
+  const T=trendDef(m), s=dailySums(cur,T.val), pts=[]; let a=0;
+  for(let d=1;d<=s.D;d++){ a+=s.sum[d]; pts.push({k:d,v:a}); }
+  let h=`<div class="cumh">${keyLabel(cur)}・逐日累進<small>${s.mm}月1日～${s.D}日</small></div>${lineSvg(pts,s.isNow?s.D:-1,s.mm)}`;
+  if(s.late) h+=`<div class="sub2" style="margin-top:0">有 ${s.late} 筆的日期在今天之後，沒有畫進來。</div>`;
+  if(T.daily){ const dp=[]; let mx=1; for(let d=1;d<=s.D;d++){ dp.push({k:d,v:s.sum[d]}); if(s.sum[d]>s.sum[mx]) mx=d; }
+    if(s.sum[mx]>0) dp[mx-1].lab=1;
+    h+=`<div class="cumh">${keyLabel(cur)}・逐日<small>每天各增加多少（不累計）</small></div>${lineSvg(dp,s.isNow?s.D:-1,s.mm)}`; }
+  return h+'<div class="cumh">逐月趨勢</div>';
+}
+function monthTable(m){
+  const T=trendDef(m), ks=trendKeys();
+  return `<div class="tw"><table><thead><tr><th class="l">月份</th><th>${esc(T.title)}</th><th>較上月</th></tr></thead><tbody>`+
+    ks.map((k,i)=>{ const v=monthVal(m,k), sp=prevSamePeriod(m,k), pv=sp?sp.pv:(i>0?monthVal(m,ks[i-1]):null), d=pv==null?null:pctVs(v,pv);
+      return `<tr${k===cur?' class="cur"':''}><td class="l">${keyLabel(k)}</td><td class="n">${fmt(v)} ${T.unit}</td><td class="n">${d==null?'—':pctHtml(d)+(sp?'<span class="est">同期</span>':'')}</td></tr>`; }).join('')+
+    '</tbody></table></div>';
+}
+function whoHtml(m){
+  const T=trendDef(m); if(!T.who||!hasMonth(cur)) return '';
+  const c=calcMonth(cur);
+  if(T.who==='item'){ const h=mixHtml(itemOrder(c.item).map(n=>({label:n,note:'',v:c.item[n].n,c:itemColor(n)})),'件'); return h?`<div class="cumh">${keyLabel(cur)}・各項目的件數</div>${h}`:''; }
+  const f=T.who==='docPf'?'pf':'amt', src=T.src, per={};
+  c.rows.forEach(r=>{ if(src&&r.src!==src) return; per[r.doc]=(per[r.doc]||{n:0,v:0}); per[r.doc].n++; per[r.doc].v+=r[f]; });
+  const h=mixHtml(Object.keys(per).map(n=>({label:n||'（未填醫師）',note:per[n].n+' 件',v:per[n].v,c:docColor(n)})),T.unit);
+  return h?`<div class="cumh">${keyLabel(cur)}・各醫師的占比</div>${h}`:'';
+}
+function showTrend(m){
+  const T=trendDef(m); if(!T) return;
+  const ks=trendKeys();
+  $('dlg').innerHTML=`<h2>${esc(T.title)}<button class="btn mini ghost" data-act="close">關閉</button></h2>
+    ${whoHtml(m)}${cumHtml(m)}${lineSvg(ks.map(k=>({k,v:monthVal(m,k)})),cur)}${monthTable(m)}
+    <div class="sub2">${cur===todayKey()?'這個月還沒過完，「較上月」比的是上個月同期（1 日到同一天），標「同期」。':''}</div>`;
+  $('mask').classList.add('on');
+}
+// 點醫師姓名：這個月各項目、逐月 PF、這個月的明細
+function showDoc(n){
+  const c=calcMonth(cur), o=c.doc[n]||{n:0,amt:0,pf:0,item:{}}, m='d:'+n, ks=trendKeys();
+  const mix=mixHtml(itemOrder(o.item).map(it=>{ const p=priceOf(D.cfg,it,cur); return {label:it,note:o.item[it]+' 件',v:o.item[it]*(p?Math.round(p.price*p.pf):0),c:itemColor(it)}; }),'元');
+  const rows=c.rows.filter(r=>r.doc===n).sort((a,b)=>b.d-a.d||b.ts-a.ts);
+  $('dlg').innerHTML=`<h2>${esc(n||'（未填醫師）')}<button class="btn mini ghost" data-act="close">關閉</button></h2>
+    <div class="tiles big2" style="margin:10px 0"><div class="tile big"><div class="v">${fmt(o.pf)}<small>元</small></div><div class="l">${keyLabel(cur)} PF</div><div class="s">${vsPrevHtml(m,cur)}</div></div>
+      <div class="tile big"><div class="v">${o.n}<small>件</small></div><div class="l">件數</div><div class="s">金額 ${fmt(o.amt)} 元</div></div></div>
+    ${mix?`<div class="cumh">PF 的組成</div>${mix}`:''}
+    <div class="cumh">逐月 PF</div>${lineSvg(ks.map(k=>({k,v:monthVal(m,k)})),cur)}
+    <div class="tw"><table><thead><tr><th class="l">月份</th><th>件數</th><th>金額</th><th>PF</th></tr></thead><tbody>`+
+    ks.map(k=>{ const x=calcMonth(k).doc[n]||{n:0,amt:0,pf:0}; return `<tr${k===cur?' class="cur"':''}><td class="l">${keyLabel(k)}</td><td class="n">${x.n}</td><td class="n">${fmt(x.amt)}</td><td class="amt">${fmt(x.pf)}</td></tr>`; }).join('')+
+    `</tbody></table></div><div class="cumh">${keyLabel(cur)}・明細</div>${rows.map(r=>recRow(r,c)).join('')||'<div class="mut">這個月沒有紀錄</div>'}`;
+  $('mask').classList.add('on');
+}
+function showSrc(s){
+  const c=calcMonth(cur), rows=c.rows.filter(r=>r.src===s).sort((a,b)=>b.d-a.d||b.ts-a.ts);
+  $('dlg').innerHTML=`<h2>${keyLabel(cur)}・${s}<button class="btn mini ghost" data-act="close">關閉</button></h2>
+    <div class="sub2" style="margin:0 0 6px">${rows.length} 件・金額 ${fmt(c.src[s].amt)} 元・PF ${fmt(c.src[s].pf)} 元</div>${rows.map(r=>recRow(r,c)).join('')||'<div class="mut">這個月沒有紀錄</div>'}`;
+  $('mask').classList.add('on');
+}
+function todayRows(){ const d=new Date(); return calcMonth(todayKey()).rows.filter(r=>r.y===d.getFullYear()&&r.m===d.getMonth()+1&&r.d===d.getDate()).sort((a,b)=>b.ts-a.ts); }
+function showToday(){
+  const rows=todayRows(), d=new Date(), c=calcMonth(todayKey());
+  $('dlg').innerHTML=`<h2>今日明細（${d.getMonth()+1}月${d.getDate()}日）<button class="btn mini ghost" data-act="close">關閉</button></h2>
+    <div class="sub2" style="margin:0 0 6px">${rows.length} 件・金額 ${fmt(rows.reduce((t,r)=>t+r.amt,0))} 元・PF ${fmt(rows.reduce((t,r)=>t+r.pf,0))} 元</div>
+    ${rows.map(r=>recRow(r,c)).join('')||'<div class="mut">今天還沒有新增的紀錄</div>'}`;
+  $('mask').classList.add('on');
+}
+
+// ---------- 刪除／復原（送一筆作廢紀錄到病房表單，試算表原本那一列不動） ----------
+async function doVoid(key,restore){
+  const r=D&&D.recs.find(x=>x.key===key); if(!r) return;
+  if(!sysReady(D.cfg.sys)){ alert('試算表的「系統」分頁不完整，無法刪除。可以直接到試算表刪掉那一列。'); return; }
+  if(!confirm(`${restore?'復原':'刪除'}這一筆？\n\n${r.m}月${r.d}日・${r.src}・病歷號末3碼 ${r.mrn}\n${r.item}\n開單醫師：${r.doc||'未填'}`)) return;
+  busyKeys[key]={v:!restore,at:Date.now()}; rerenderOpen();
+  try{ await voidRec(D.cfg.sys,key,restore); }catch(e){ delete busyKeys[key]; rerenderOpen(); alert('送不出去（沒有網路？），請稍後再試。'); return; }
+  for(const ms of [3000,6000,10000,20000]){ await new Promise(res=>setTimeout(res,ms)); await refresh(true); if(!busyKeys[key]) break; }
+  delete busyKeys[key]; rerenderOpen();
+}
+// 視窗開著時連視窗一起重畫（目前開的是哪一種記在 _dlg）
+let _dlg=null;
+function rerenderOpen(){ renderAll(); if($('mask').classList.contains('on')&&_dlg) _dlg(); }
+
+// ---------- 操作 ----------
+function act(a,t){
+  const k=t.dataset.k;
+  if(a==='refresh') refresh(false);
+  else if(a==='month') switchMonth(k);
+  else if(a==='mstep') switchMonth(_mbKeys[_mbKeys.indexOf(cur)+Number(t.dataset.d)]);
+  else if(a==='mpick'){ pickOpen=!pickOpen; pickYear=null; renderMonthBar(_mbKeys); }
+  else if(a==='myear'){ const ys=[...new Set(_mbKeys.map(x=>+x.split('-')[0]))], y=ys[ys.indexOf(pickYear)+Number(t.dataset.d)]; if(y){ pickYear=y; renderMonthBar(_mbKeys); } }
+  else if(a==='trend'){ const m=t.dataset.m; _dlg=()=>showTrend(m); _dlg(); }
+  else if(a==='doc'){ _dlg=()=>showDoc(k); _dlg(); }
+  else if(a==='src'){ _dlg=()=>showSrc(k); _dlg(); }
+  else if(a==='today'){ _dlg=showToday; _dlg(); }
+  else if(a==='close'){ $('mask').classList.remove('on'); _dlg=null; }
+  else if(a==='del') doVoid(k,false);
+  else if(a==='restore') doVoid(k,true);
+  else if(a==='showvoid'){ showVoid=!showVoid; renderAll(); }
+  else if(a==='link'){
+    const id=sheetIdOf(($('link')||{}).value);
+    if(!id){ alert('這看起來不是正確的連結，請把收到的整條連結完整貼上。'); return; }
+    try{ localStorage.setItem(LS_SHEET,id); }catch(e){}
+    location.hash='s='+id; location.reload();
+  }
+}
+document.addEventListener('click',e=>{
+  if(e.target===$('mask')){ $('mask').classList.remove('on'); _dlg=null; return; }
+  if(pickOpen&&!e.target.closest('#mpick')&&!e.target.closest('#monthbar')){ pickOpen=false; $('mpick').classList.remove('on'); }
+  const t=e.target.closest('[data-act]'); if(!t||t.tagName==='INPUT') return;
+  act(t.dataset.act,t);
+});
+document.addEventListener('toggle',e=>{ const d=e.target; if(d.dataset&&d.dataset.sec) ui[d.dataset.sec]=d.open; },true);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ $('mask').classList.remove('on'); _dlg=null; } if(e.key==='Enter'&&e.target.id==='link') act('link',e.target); });
+window.addEventListener('hashchange',()=>{ const id=sheetIdOf(location.hash); if(id&&id!==SID) location.reload(); });
+// 開著時每分鐘讀一次；切回來超過 15 秒沒讀過就補讀
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible') return;
+  checkVersion(()=>$('mask').classList.contains('on')||Object.keys(busyKeys).length>0);
+  if(Date.now()-checked>15000) refresh(true);
+});
+setInterval(()=>{ if(document.visibilityState==='visible') refresh(true); },60*1000);
+setInterval(()=>{ if(document.visibilityState==='visible') checkVersion(()=>$('mask').classList.contains('on')||Object.keys(busyKeys).length>0); },10*60*1000);
+
+renderAll();
+refresh(true);
+</script>
+</body>
+</html>
