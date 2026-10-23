@@ -128,7 +128,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#eef6f9}
 .rec{display:flex;align-items:center;gap:4px 10px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
 .rec .dd{font-variant-numeric:tabular-nums;min-width:40px;color:var(--mut)}
 .rec .src{font-size:12px;font-weight:700;border-radius:5px;padding:0 6px;color:#fff}
-.rec .src.o{background:#1f6f8b}.rec .src.w{background:#e07b39}
+.rec .src.o{background:#1f6f8b}.rec .src.w{background:#e07b39}.rec .src.x{background:#8e6bb5}
 .rec .m{font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:1px}
 .rec .i{flex:1;min-width:130px}
 .rec .dc{color:var(--txt)}
@@ -249,7 +249,7 @@ const hasMonth=k=>_months.has(k);
 function calcMonth(k){
   if(_calc[k]) return _calc[k];
   const z=()=>({n:0,amt:0,pf:0,item:{}}), add=(o,r)=>{ o.n++; o.amt+=r.amt; o.pf+=r.pf; o.item[r.item]=(o.item[r.item]||0)+1; };
-  const c={k,rows:[],n:0,amt:0,pf:0,item:{},doc:{},src:{'門診':z(),'病房':z()},noPrice:{},oddDoc:{},noDoc:0,noItem:0,noMrn:0,dups:new Set(),voided:[]}, seen={};
+  const c={k,rows:[],n:0,amt:0,pf:0,item:{},doc:{},src:{'門診':z(),'病房':z(),'其他':z()},noPrice:{},oddDoc:{},noDoc:0,noItem:0,noMrn:0,dups:new Set(),voided:[]}, seen={};
   D.recs.forEach(r=>{
     if(r.k!==k) return;
     if(r.void){ c.voided.push(r); return; }
@@ -274,7 +274,9 @@ function trendKeys(){ const ks=allKeys(); if(!ks.length) return []; const out=[]
 // ---------- 顏色 ----------
 const ICOLOR=['#1f6f8b','#e07b39','#2e9e6b','#8e6bb5','#5b9bd5','#c9a34a','#d16a8a','#4fb3bf'];
 const PCOLOR=['#1a4a7a','#e2574c','#2e9e6b','#c9a34a','#8e6bb5','#4fb3bf','#d16a8a','#6b8e23'];
-const SCOLOR={'門診':'#1f6f8b','病房':'#e07b39'};
+const SCOLOR={'門診':'#1f6f8b','病房':'#e07b39','其他':'#8e6bb5'};
+// 這個月有紀錄的來院（門診、病房一定列；其他有才列）
+const srcsIn=c=>SRCS.filter(s=>s!=='其他'||c.src['其他'].n>0);
 const hashI=s=>[...String(s)].reduce((t,ch)=>t+ch.charCodeAt(0),0);
 function itemColor(n){ const i=itemNames(D.cfg).indexOf(n); return i<0?'#9aa7b4':ICOLOR[i%ICOLOR.length]; }
 function docColor(n){ if(!n) return '#b8c2cc'; let i=D.cfg.docs.indexOf(n); if(i<0) i=D.cfg.docs.length+hashI(n); return PCOLOR[i%PCOLOR.length]; }
@@ -365,7 +367,7 @@ function renderMonth(){
   h+=`<div class="tiles big2">
     <div class="tile big clk" data-act="trend" data-m="amt" role="button"><span class="tg">📈</span><div class="v">${fmt(c.amt)}<small>元</small></div><div class="l">總金額</div><div class="s">${vsPrevHtml('amt',cur)}</div>${pj('amt')}</div>
     <div class="tile big clk" data-act="trend" data-m="n" role="button"><span class="tg">📈</span><div class="v">${c.n}<small>件</small></div><div class="l">總件數</div><div class="s">${vsPrevHtml('n',cur)}</div>${pj('n')}
-      <div class="s">門診 ${c.src['門診'].n}・病房 ${c.src['病房'].n}</div></div>
+      <div class="s">${srcsIn(c).map(s=>`${s} ${c.src[s].n}`).join('・')}</div></div>
   </div>`;
   const io=itemOrder(c.item);
   const mix=mixHtml(io.map(n=>({label:n,note:c.item[n].n+' 件',v:c.item[n].amt,c:itemColor(n)})),'元');
@@ -376,6 +378,7 @@ function renderMonth(){
       <div class="s">${vsPrevHtml('pf',cur)}</div>${ds.length?`<div class="s">${ds.map(n=>`${esc(n||'未填')} ${fmt(c.doc[n].pf)}`).join('・')}</div>`:''}</div>
     <div class="tile clk" data-act="trend" data-m="opd" role="button"><span class="tg">📈</span><div class="l">門診金額</div><div class="v">${fmt(c.src['門診'].amt)}<small>元</small></div><div class="s">${c.src['門診'].n} 件・${vsPrevHtml('opd',cur)}</div></div>
     <div class="tile clk" data-act="trend" data-m="ward" role="button"><span class="tg">📈</span><div class="l">病房金額</div><div class="v">${fmt(c.src['病房'].amt)}<small>元</small></div><div class="s">${c.src['病房'].n} 件・${vsPrevHtml('ward',cur)}</div></div>
+    ${c.src['其他'].n?`<div class="tile clk" data-act="trend" data-m="oth" role="button"><span class="tg">📈</span><div class="l">其他來院金額</div><div class="v">${fmt(c.src['其他'].amt)}<small>元</small></div><div class="s">${c.src['其他'].n} 件・${vsPrevHtml('oth',cur)}</div></div>`:''}
   </div>`;
   const sec=(id,title,right,body)=>`<details class="card sec" data-sec="${id}"${ui[id]?' open':''}><summary><span>${title}</span><span class="sum-amt">${right}</span></summary>${body}</details>`;
   const qtd=(n,it)=>n?`<td class="n q" data-l="${esc(shortItem(it))}">${n}</td>`:'<td class="z q">0</td>';
@@ -388,21 +391,21 @@ function renderMonth(){
       `<td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="金額">${fmt(o.amt)}</td><td class="amt" data-l="PF">${fmt(o.pf)}</td></tr>`; }).join('')||`<tr><td class="l mut" colspan="${io.length+4}">這個月還沒有紀錄</td></tr>`)+
     (ds.length?`<tr class="tot"><td class="l nmc">合計</td>${io.map(it=>qtd(c.item[it].n,it)).join('')}<td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="金額">${fmt(c.amt)}</td><td class="amt" data-l="PF">${fmt(c.pf)}</td></tr>`:'')+
     '</tbody></table></div>');
-  // 門診／病房
-  const srcMix=mixHtml(['門診','病房'].map(s=>({label:s,note:c.src[s].n+' 件',v:c.src[s].amt,c:SCOLOR[s]})),'元');
-  h+=sec('src','門診／病房',`門診 ${c.src['門診'].n}・病房 ${c.src['病房'].n} 件`,(srcMix?`<div class="mixh">金額的占比</div>${srcMix}<div class="mixh" style="margin-top:12px">明細</div>`:'')+
-    `<div class="tw"><table class="ppl"><thead><tr><th class="l">來源</th>${ihd}<th>件數</th><th>PF</th><th>金額</th></tr></thead><tbody>`+
-    ['門診','病房'].map(s=>{ const o=c.src[s]; return `<tr><td class="l nmc"><button class="nm" data-act="src" data-k="${s}">${s}</button></td>${io.map(it=>qtd(o.item[it],it)).join('')}`+
+  // 來院（門診／病房／其他）
+  const srcs=srcsIn(c), srcMix=mixHtml(srcs.map(s=>({label:s,note:c.src[s].n+' 件',v:c.src[s].amt,c:SCOLOR[s]})),'元');
+  h+=sec('src','來院',srcs.map(s=>`${s} ${c.src[s].n}`).join('・')+' 件',(srcMix?`<div class="mixh">金額的占比</div>${srcMix}<div class="mixh" style="margin-top:12px">明細</div>`:'')+
+    `<div class="tw"><table class="ppl"><thead><tr><th class="l">來院</th>${ihd}<th>件數</th><th>PF</th><th>金額</th></tr></thead><tbody>`+
+    srcs.map(s=>{ const o=c.src[s]; return `<tr><td class="l nmc"><button class="nm" data-act="src" data-k="${s}">${s}</button></td>${io.map(it=>qtd(o.item[it],it)).join('')}`+
       `<td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; }).join('')+
     `<tr class="tot"><td class="l nmc">合計</td>${io.map(it=>qtd(c.item[it].n,it)).join('')}<td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="PF">${fmt(c.pf)}</td><td class="amt" data-l="金額">${fmt(c.amt)}</td></tr></tbody></table></div>`);
   // 各項目
   const itemRow=(n,o,cls,label)=>{ const p=label?null:priceOf(D.cfg,n,cur);
     return `<tr${cls?` class="${cls}"`:''}><td class="l nmc">${label?esc(label):`<b>${esc(n)}</b>`}</td><td class="n sub" data-l="價錢">${label?'':p?fmt(p.price):'—'}</td>`+
-      `<td class="n sub" data-l="門診">${o.src['門診']||0}</td><td class="n sub" data-l="病房">${o.src['病房']||0}</td><td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; };
-  const icats=catsIn(D.cfg,io), catSum=cat=>io.filter(n=>catOf(D.cfg,n)===cat).reduce((s,n)=>{ const o=c.item[n]; s.n+=o.n; s.pf+=o.pf; s.amt+=o.amt; ['門診','病房'].forEach(x=>{ s.src[x]+=o.src[x]||0; }); return s; },{n:0,pf:0,amt:0,src:{'門診':0,'病房':0}});
-  h+=sec('item','各項目',`${c.n} 件`,`<div class="tw"><table class="ppl"><thead><tr><th class="l">項目</th><th>價錢</th><th>門診</th><th>病房</th><th>件數</th><th>PF</th><th>金額</th></tr></thead><tbody>`+
-    (icats.map(cat=>(icats.length>1?itemRow('',catSum(cat),'catr',cat+' 小計'):'')+io.filter(n=>catOf(D.cfg,n)===cat).map(n=>itemRow(n,c.item[n])).join('')).join('')||'<tr><td class="l mut" colspan="7">這個月還沒有紀錄</td></tr>')+
-    (io.length?`<tr class="tot"><td class="l nmc">合計</td><td class="n sub"></td><td class="n sub" data-l="門診">${c.src['門診'].n}</td><td class="n sub" data-l="病房">${c.src['病房'].n}</td><td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="PF">${fmt(c.pf)}</td><td class="amt" data-l="金額">${fmt(c.amt)}</td></tr>`:'')+
+      srcs.map(x=>`<td class="n sub" data-l="${x}">${o.src[x]||0}</td>`).join('')+`<td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; };
+  const icats=catsIn(D.cfg,io), catSum=cat=>io.filter(n=>catOf(D.cfg,n)===cat).reduce((s,n)=>{ const o=c.item[n]; s.n+=o.n; s.pf+=o.pf; s.amt+=o.amt; SRCS.forEach(x=>{ s.src[x]+=o.src[x]||0; }); return s; },{n:0,pf:0,amt:0,src:{'門診':0,'病房':0,'其他':0}});
+  h+=sec('item','各項目',`${c.n} 件`,`<div class="tw"><table class="ppl"><thead><tr><th class="l">項目</th><th>價錢</th>${srcs.map(x=>`<th>${x}</th>`).join('')}<th>件數</th><th>PF</th><th>金額</th></tr></thead><tbody>`+
+    (icats.map(cat=>(icats.length>1?itemRow('',catSum(cat),'catr',cat+' 小計'):'')+io.filter(n=>catOf(D.cfg,n)===cat).map(n=>itemRow(n,c.item[n])).join('')).join('')||`<tr><td class="l mut" colspan="${srcs.length+5}">這個月還沒有紀錄</td></tr>`)+
+    (io.length?`<tr class="tot"><td class="l nmc">合計</td><td class="n sub"></td>${srcs.map(x=>`<td class="n sub" data-l="${x}">${c.src[x].n}</td>`).join('')}<td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="PF">${fmt(c.pf)}</td><td class="amt" data-l="金額">${fmt(c.amt)}</td></tr>`:'')+
     '</tbody></table></div>');
   // 明細
   const rows=c.rows.concat(showVoid?c.voided:[]).sort((a,b)=>b.d-a.d||b.ts-a.ts);
@@ -416,18 +419,18 @@ function renderMonth(){
 }
 function recRow(r,c){
   const b=busyKeys[r.key];
-  return `<div class="rec${r.void?' void':''}"><span class="dd">${r.md}</span><span class="src ${r.src==='門診'?'o':'w'}">${r.src}</span><span class="m">${esc(mrnDisp(r.mrn,D.cfg.sys))}</span>`+
+  return `<div class="rec${r.void?' void':''}"><span class="dd">${r.md}</span><span class="src ${srcCls(r.src)}">${esc(r.src)}${r.srcNote?'・'+esc(r.srcNote):''}</span><span class="m">${esc(mrnDisp(r.mrn,D.cfg.sys))}</span>`+
     `<span class="i">${esc(r.item)}${c&&c.dups.has(r.key)?' <b class="dupw" title="同一天、同病歷號、同項目有兩筆以上">⚠ 重複？</b>':''}</span><span class="dc">${esc(r.doc)||'<span style="color:var(--bad)">未填</span>'}</span><span class="a">${fmt(r.amt)}</span>`+
     (b?'<span class="mut">處理中…</span>':r.void?`<button class="btn mini outline" data-act="restore" data-k="${esc(r.key)}">復原</button>`:`<button class="btn mini ghost" data-act="del" data-k="${esc(r.key)}">刪除</button>`)+'</div>';
 }
 function yearHtml(){
   const y=cur.split('-')[0], ks=trendKeys().filter(k=>k.startsWith(y+'-'));
   if(!ks.length) return '<div class="mut">還沒有資料</div>';
-  const t={n:0,amt:0,pf:0,o:0,w:0};
-  const rows=ks.map(k=>{ const c=calcMonth(k); t.n+=c.n; t.amt+=c.amt; t.pf+=c.pf; t.o+=c.src['門診'].n; t.w+=c.src['病房'].n;
-    return `<tr class="clk${k===cur?' cur':''}" data-act="month" data-k="${k}"><td class="l">${Number(k.split('-')[1])}月</td><td class="n">${c.n}</td><td class="n">${c.src['門診'].n}</td><td class="n">${c.src['病房'].n}</td><td class="n">${fmt(c.amt)}</td><td class="amt">${fmt(c.pf)}</td></tr>`; }).join('');
-  return `<div class="tw"><table><thead><tr><th class="l">月份</th><th>件數</th><th>門診</th><th>病房</th><th>金額</th><th>PF</th></tr></thead><tbody>${rows}
-    <tr class="tot"><td class="l">合計</td><td class="n">${t.n}</td><td class="n">${t.o}</td><td class="n">${t.w}</td><td class="n">${fmt(t.amt)}</td><td class="amt">${fmt(t.pf)}</td></tr></tbody></table></div>`;
+  const ys=SRCS.filter(s=>s!=='其他'||ks.some(k=>calcMonth(k).src['其他'].n)), t={n:0,amt:0,pf:0,s:{}};   // 這一年有「其他」才多一欄
+  const rows=ks.map(k=>{ const c=calcMonth(k); t.n+=c.n; t.amt+=c.amt; t.pf+=c.pf; ys.forEach(s=>{ t.s[s]=(t.s[s]||0)+c.src[s].n; });
+    return `<tr class="clk${k===cur?' cur':''}" data-act="month" data-k="${k}"><td class="l">${Number(k.split('-')[1])}月</td><td class="n">${c.n}</td>${ys.map(s=>`<td class="n">${c.src[s].n}</td>`).join('')}<td class="n">${fmt(c.amt)}</td><td class="amt">${fmt(c.pf)}</td></tr>`; }).join('');
+  return `<div class="tw"><table><thead><tr><th class="l">月份</th><th>件數</th>${ys.map(s=>`<th>${s}</th>`).join('')}<th>金額</th><th>PF</th></tr></thead><tbody>${rows}
+    <tr class="tot"><td class="l">合計</td><td class="n">${t.n}</td>${ys.map(s=>`<td class="n">${t.s[s]}</td>`).join('')}<td class="n">${fmt(t.amt)}</td><td class="amt">${fmt(t.pf)}</td></tr></tbody></table></div>`;
 }
 function cfgHtml(){
   const sys=D.cfg.sys, W=!!writeId(), nowK=todayKey(), offD=new Set(D.cfg.docsOff||[]);
@@ -529,6 +532,7 @@ const TREND={
   pf:  {title:'PF 合計',  unit:'元',val:r=>r.pf,who:'docPf'},
   opd: {title:'門診金額', unit:'元',val:r=>r.src==='門診'?r.amt:0,who:'docAmt',src:'門診'},
   ward:{title:'病房金額', unit:'元',val:r=>r.src==='病房'?r.amt:0,who:'docAmt',src:'病房'},
+  oth: {title:'其他來院金額',unit:'元',val:r=>r.src==='其他'?r.amt:0,who:'docAmt',src:'其他'},
 };
 function trendDef(m){
   if(TREND[m]) return TREND[m];

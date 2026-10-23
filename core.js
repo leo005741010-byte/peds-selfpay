@@ -3,14 +3,14 @@
 // 兒科自費：病房登錄 App（index.html）與管理頁（admin.html）共用的程式。
 // 資料全部在同一份 Google 試算表：
 //   「門診」分頁＝門診表單（Google 表單，放在門診護理師電腦）的回應
-//   「病房」分頁＝病房表單的回應：病房 NP 用這個 App 送出；刪除（作廢）紀錄也記在這裡
+//   「病房」分頁＝病房表單的回應：這個 App 送出的都在這裡（「來院」欄＝門診／病房／其他）；刪除（作廢）紀錄也記在這裡
 //   「項目」分頁＝自費項目、價錢、PF（每件的金額）、適用起、停用、類別（檢驗／疫苗）、排序（新增項目、調價都在這裡改）
 //   「醫師」分頁＝開單醫師名單
 //   「系統」分頁＝病房表單的送出位址與欄位代號（建立腳本自動填好）
 // 本檔公開在網站上，所以不含任何姓名、價錢、試算表或表單網址：
 //   試算表代號由連結 #s=… 帶進來、存在這台裝置；其他全部從試算表讀。
 // ============================================================
-const APP_VER='2026.10.23f';
+const APP_VER='2026.10.23g';
 const LS_SHEET='pedsSelfpay_sheet';
 
 const $=id=>document.getElementById(id);
@@ -134,7 +134,7 @@ function parseDocs(t){
 function parseSys(t){
   const o={}; t.rows.forEach(r=>{ const k=normLabel(r[0]); if(k) o[k]=String(r[1]==null?'':r[1]).trim(); });
   return {form:o['病房表單']||'', eDate:o['欄位_日期']||'', eMrn:o['欄位_病歷號']||'', eItem:o['欄位_項目']||'', eDoc:o['欄位_醫師']||'', eVoid:o['欄位_作廢']||'',
-    clinic:o['門診表單']||'', itemsGid:o['項目分頁']||'', write:o['管理寫入']||'', mrnLen:Number(o['病歷號位數'])||0};
+    eSrc:o['欄位_來院']||'', clinic:o['門診表單']||'', itemsGid:o['項目分頁']||'', write:o['管理寫入']||'', mrnLen:Number(o['病歷號位數'])||0};
 }
 // 類別的先後：檢驗、疫苗，其他的排後面
 const CATS=['檢驗','疫苗'];
@@ -156,11 +156,19 @@ function priceOf(cfg,item,key){
 const activeItems=cfg=>itemNames(cfg).filter(n=>{ const p=priceOf(cfg,n,todayKey()); return p&&!p.off; });
 
 // ---------- 門診／病房回應 ----------
-// 回傳 {recs:[一個項目一筆], voids:[作廢或復原]}。一筆的 key＝來源|送出時間|病歷號（刪除時用它指定是哪一筆）；
+// 來院：App 送的「來院」欄（門診／病房／其他：說明）；空白＝這一列在哪個分頁就算哪裡（門診表單＝門診、舊的病房紀錄＝病房）
+function srcOf(raw,tab){
+  const s=String(raw==null?'':raw).trim();
+  if(!s) return {src:tab,note:''};
+  if(/^門診/.test(s)) return {src:'門診',note:''};
+  if(/^病房/.test(s)) return {src:'病房',note:''};
+  return {src:'其他',note:s.replace(/^其他[:：\s]*/,'')};
+}
+// 回傳 {recs:[一個項目一筆], voids:[作廢或復原]}。一筆的 key＝分頁|送出時間|病歷號（刪除時用它指定是哪一筆）；
 // 門診表單分「檢驗項目」「疫苗項目」兩題，同一次可以各選一個 → 一列拆成兩筆，第二筆的 key 後面加 |2
-function parseResp(src,t,docs){
+function parseResp(tab,t,docs){
   const ci=re=>t.cols.findIndex(l=>re.test(l));
-  const iTs=Math.max(0,ci(/時間戳記|timestamp/i)), iDate=ci(/^日期/), iMrn=ci(/病歷/), iDoc=ci(/醫師/), iVoid=ci(/作廢/);
+  const iTs=Math.max(0,ci(/時間戳記|timestamp/i)), iDate=ci(/^日期/), iMrn=ci(/病歷/), iDoc=ci(/醫師/), iVoid=ci(/作廢/), iSrc=ci(/^(來院|來源)/);
   const iItems=t.cols.map((l,i)=>/項目$/.test(l)&&!/作廢/.test(l)?i:-1).filter(i=>i>=0);
   const recs=[], voids=[];
   t.rows.forEach((r,ri)=>{
@@ -170,8 +178,8 @@ function parseResp(src,t,docs){
     if(vv){ const restore=/^復原\|/.test(vv); voids.push({t:tms,target:restore?vv.slice(3):vv,restore}); return; }
     const mrn=mrn3(g(iMrn)), items=iItems.map(i=>normItem(g(i))).filter(Boolean), doc=normDoc(g(iDoc),docs);
     if(!mrn&&!items.length&&!doc) return;
-    const dt=parseGDate(g(iDate))||ts, base=`${src}|${tsKey}|${mrn}`;   // 日期空白＝送出那天
-    (items.length?items:['']).forEach((item,j)=>recs.push({src,row:ri+2,ts:tms,tsKey,key:j?`${base}|${j+1}`:base,y:dt.y,m:dt.m,d:dt.d,k:`${dt.y-1911}-${pad(dt.m)}`,md:`${dt.m}/${dt.d}`,mrn,item,doc}));
+    const dt=parseGDate(g(iDate))||ts, base=`${tab}|${tsKey}|${mrn}`, so=srcOf(g(iSrc),tab);   // 日期空白＝送出那天
+    (items.length?items:['']).forEach((item,j)=>recs.push({src:so.src,srcNote:so.note,tab,row:ri+2,ts:tms,tsKey,key:j?`${base}|${j+1}`:base,y:dt.y,m:dt.m,d:dt.d,k:`${dt.y-1911}-${pad(dt.m)}`,md:`${dt.m}/${dt.d}`,mrn,item,doc}));
   });
   return {recs,voids};
 }
@@ -200,7 +208,9 @@ async function postForm(sys,fields){
   if(window.PS_MOCK) return window.PS_MOCK.post(sys.form,body);
   await fetch(sys.form,{method:'POST',mode:'no-cors',body});   // 沒網路時會丟例外
 }
-const submitRec=(sys,r)=>postForm(sys,{[sys.eDate]:r.date,[sys.eMrn]:r.mrn,[sys.eItem]:r.item,[sys.eDoc]:r.doc});
+const submitRec=(sys,r)=>postForm(sys,{[sys.eDate]:r.date,[sys.eMrn]:r.mrn,[sys.eItem]:r.item,[sys.eDoc]:r.doc,[sys.eSrc||'']:r.src||''});
+const SRCS=['門診','病房','其他'];
+const srcCls=s=>({'門診':'o','病房':'w'}[s]||'x');   // 來院的顏色標籤
 const voidRec=(sys,key,restore)=>postForm(sys,{[sys.eVoid]:(restore?'復原|':'')+key});
 
 // ---------- 網站有新版就自動換上（手機上的 App 常常只是從背景叫回來、不會重新載入） ----------
