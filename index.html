@@ -50,7 +50,8 @@ input[type=date]{min-height:48px}
 input:focus{outline:2px solid #8cc3d6;outline-offset:0}
 input.chg{border-color:#f2a541;background:#fff8ea}
 input.err{border-color:var(--bad);background:var(--badbg)}
-#f-mrn{font-size:28px;letter-spacing:10px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;max-width:180px}
+#f-mrn{font-size:24px;letter-spacing:2px;font-weight:700;font-variant-numeric:tabular-nums}
+.cath{font-size:12.5px;color:var(--mut);font-weight:700;margin:4px 0 -2px}
 .opts{display:flex;flex-wrap:wrap;gap:8px}
 .opts.col{flex-direction:column}
 .opt{font:inherit;font-size:17px;border:1.5px solid #c5d3db;background:#fff;color:var(--txt);border-radius:10px;padding:11px 14px;cursor:pointer;text-align:left;min-width:92px}
@@ -110,7 +111,7 @@ if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]mock\b/.test(locat
 <script>
 'use strict';
 // ============================================================
-// 病房 NP 用：填 日期／病歷號末3碼／項目／開單醫師 → 送到病房表單（寫進試算表「病房」分頁）。
+// 病房 NP 用：填 日期／病歷號／項目（分檢驗、疫苗）／開單醫師 → 送到病房表單（寫進試算表「病房」分頁）。
 // 送出後回頭讀試算表，看到那一筆才算記錄成功；沒網路時先存在這台手機，連上後自動補送。
 // ============================================================
 const LS_CACHE='pedsSelfpay_np', LS_OUT='pedsSelfpay_outbox';
@@ -158,7 +159,7 @@ function matchPending(){
     if(p.st!=='check'&&p.st!=='miss') return;
     if(p.kind==='void'){ const r=data.recs.find(x=>x.key===p.key); if(r&&r.void===!p.restore) p.st='ok'; return; }
     const [y,m,d]=p.date.split('-').map(Number);
-    const r=data.recs.find(x=>!used.has(x.key)&&!x.void&&x.mrn===p.mrn&&x.item===p.item&&x.doc===p.doc&&x.y===y&&x.m===m&&x.d===d&&x.ts>=p.at-15*60*1000);
+    const r=data.recs.find(x=>!used.has(x.key)&&!x.void&&mrnCmp(x.mrn)===mrnCmp(p.mrn)&&x.item===p.item&&x.doc===p.doc&&x.y===y&&x.m===m&&x.d===d&&x.ts>=p.at-15*60*1000);
     if(r){ p.st='ok'; p.hit=r.key; used.add(r.key); }
   });
 }
@@ -206,10 +207,11 @@ function renderForm(){
   el.innerHTML=`<div class="card">
     <div class="fl${errs.date?' err':''}">日期</div>
     <input type="date" id="f-date" value="${esc(draft.date)}" max="${today}" class="${errs.date?'err':draft.date!==today?'chg':''}">
-    <div class="fl${errs.mrn?' err':''}">病歷號末3碼</div>
-    <input type="text" id="f-mrn" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${esc(draft.mrn)}" class="${errs.mrn?'err':''}">
+    <div class="fl${errs.mrn?' err':''}">病歷號</div>
+    <input type="text" id="f-mrn" inputmode="numeric" autocomplete="off" value="${esc(draft.mrn)}" class="${errs.mrn?'err':''}">
     <div class="fl${errs.item?' err':''}">項目</div>
-    <div class="opts col${errs.item?' err':''}">${items.map(n=>`<button class="opt${draft.item===n?' on':''}" data-act="item" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+    <div class="opts col${errs.item?' err':''}">${catsIn(data.cfg,items).map(cat=>`<div class="cath">${esc(cat)}</div>`+
+      items.filter(n=>catOf(data.cfg,n)===cat).map(n=>`<button class="opt${draft.item===n?' on':''}" data-act="item" data-v="${esc(n)}">${esc(n)}</button>`).join('')).join('')}</div>
     <div class="fl${errs.doc?' err':''}">開單醫師</div>
     <div class="opts${errs.doc?' err':''}">${docs.map(n=>`<button class="opt${!draft.other&&draft.doc===n?' on':''}" data-act="doc" data-v="${esc(n)}">${esc(n)}</button>`).join('')}<button class="opt${draft.other?' on':''}" data-act="doc-other">其他</button></div>
     ${draft.other?`<input type="text" id="f-other" placeholder="醫師姓名" autocomplete="off" value="${esc(draft.otherName)}" class="${errs.doc?'err':''}">`:''}
@@ -217,7 +219,7 @@ function renderForm(){
   </div>`;
 }
 const mdOf=s=>{ const [,m,d]=String(s).split('-').map(Number); return `${m}/${d}`; };
-const recTxt=r=>`${r.md||mdOf(r.date)}・${r.mrn}・${r.item}・${r.doc}`;
+const recTxt=r=>`${r.md||mdOf(r.date)}・${mrnDisp(r.mrn,data&&data.cfg.sys)}・${r.item}・${r.doc}`;
 function renderRest(){
   const el=$('rest'); if(!SID||!data){ el.innerHTML=''; return; }
   let h='';
@@ -235,7 +237,7 @@ function renderRest(){
   const list=data.recs.filter(r=>!r.void).sort((a,b)=>b.y-a.y||b.m-a.m||b.d-a.d||b.ts-a.ts).slice(0,40);
   let lastD='';
   const rows=list.map(r=>{ const dd=`${r.m}/${r.d}`, head=dd!==lastD?`<div class="dh">${isT(r)?'今天 ':''}${dd}</div>`:''; lastD=dd;
-    return head+`<div class="rec"><span class="m">${esc(r.mrn)}</span><span class="i">${esc(r.item)}</span><span class="dc">${esc(r.doc)}</span>`+
+    return head+`<div class="rec"><span class="m">${esc(mrnDisp(r.mrn,data.cfg.sys))}</span><span class="i">${esc(r.item)}</span><span class="dc">${esc(r.doc)}</span>`+
       `<button class="btn mini ghost" data-act="del" data-k="${esc(r.key)}">刪除</button></div>`; }).join('');
   const nT=data.recs.filter(r=>!r.void&&isT(r)).length;
   h+=`<details class="card sec" data-sec="recent"${ui.recent?' open':''}><summary><span>最近登錄</span><span class="r">今天 ${nT} 筆</span></summary>${rows||'<div class="mut">還沒有紀錄</div>'}</details>`;
@@ -251,15 +253,15 @@ function doSend(){
   const today=isoDay(new Date()), doc=draft.other?String(draft.otherName||'').replace(/\s+/g,''):draft.doc;
   errs={};
   if(!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)||draft.date>today) errs.date=1;
-  if(!/^\d{3}$/.test(draft.mrn)) errs.mrn=1;
+  if(!/^[0-9A-Z]{1,15}$/.test(draft.mrn)) errs.mrn=1;
   if(!draft.item) errs.item=1;
   if(!doc) errs.doc=1;
   if(Object.keys(errs).length){ renderForm(); return; }
   const r={id:Date.now().toString(36),kind:'add',date:draft.date,mrn:draft.mrn,item:draft.item,doc:normDoc(doc,data.cfg.docs)};
   const [y,m,d]=r.date.split('-').map(Number);
-  const dup=data.recs.some(x=>!x.void&&x.y===y&&x.m===m&&x.d===d&&x.mrn===r.mrn&&x.item===r.item)||pending.some(p=>p.kind==='add'&&p.st!=='ok'&&p.date===r.date&&p.mrn===r.mrn&&p.item===r.item);
+  const dup=data.recs.some(x=>!x.void&&x.y===y&&x.m===m&&x.d===d&&mrnCmp(x.mrn)===mrnCmp(r.mrn)&&x.item===r.item)||pending.some(p=>p.kind==='add'&&p.st!=='ok'&&p.date===r.date&&mrnCmp(p.mrn)===mrnCmp(r.mrn)&&p.item===r.item);
   const msg=(dup?`⚠ 這一天已經有一筆「${r.mrn}・${r.item}」，確定要再送一筆？\n\n`:'送出這一筆？\n\n')+
-    `日期：${m}月${d}日\n病歷號末3碼：${r.mrn}\n項目：${r.item}\n開單醫師：${r.doc}`;
+    `日期：${m}月${d}日\n病歷號：${r.mrn}\n項目：${r.item}\n開單醫師：${r.doc}`;
   if(!confirm(msg)) return;
   r.at=Date.now(); r.st='sending'; pending.unshift(r);
   draft=newDraft(); errs={}; renderForm(); renderRest();
@@ -270,7 +272,7 @@ function doSend(){
 function doDel(key,restore){
   const r=data&&data.recs.find(x=>x.key===key); if(!r||!sysReady(data.cfg.sys)) return;
   const txt=recTxt(r);
-  if(!confirm(`刪除這一筆？\n\n${r.m}月${r.d}日・病歷號末3碼 ${r.mrn}\n${r.item}\n開單醫師：${r.doc}`)) return;
+  if(!confirm(`刪除這一筆？\n\n${r.m}月${r.d}日・病歷號 ${mrnDisp(r.mrn,data.cfg.sys)}\n${r.item}\n開單醫師：${r.doc}`)) return;
   const p={id:Date.now().toString(36),kind:'void',key,restore:!!restore,txt,at:Date.now(),st:'sending'};
   pending.unshift(p); renderRest();
   sendOne(p).then(()=>{ renderRest(); if(p.st==='check') verifySoon(); });
@@ -296,7 +298,7 @@ function act(a,t){
 }
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-act]'); if(!t||t.tagName==='INPUT') return; act(t.dataset.act,t); });
 document.addEventListener('input',e=>{ const t=e.target;
-  if(t.id==='f-mrn'){ const v=t.value.replace(/\D/g,'').slice(0,3); if(v!==t.value) t.value=v; draft.mrn=v; if(errs.mrn&&/^\d{3}$/.test(v)){ delete errs.mrn; t.classList.remove('err'); } }
+  if(t.id==='f-mrn'){ const v=t.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase().slice(0,15); if(v!==t.value) t.value=v; draft.mrn=v; if(errs.mrn&&v){ delete errs.mrn; t.classList.remove('err'); } }
   else if(t.id==='f-other'){ draft.otherName=t.value; }
   else if(t.id==='f-date'){ draft.date=t.value; t.classList.remove('err'); t.classList.toggle('chg',t.value!==isoDay(new Date())); }
 });

@@ -1,7 +1,7 @@
 # 本機檔：建立腳本（含醫師姓名與價錢）、測試用假資料，不可上傳
 setup.gs
 _mock.js
-_test*.html
+_test*
 *.bak
 desktop.ini
 Thumbs.db

@@ -158,6 +158,11 @@ td.acts .btn{margin:2px 4px 2px 0}
 .edgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:8px}
 .edgrid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--navy-dark);font-weight:600}
 .edgrid input{width:100%;font-size:16px}
+tr.catr td{background:#eef6f9;font-weight:700;color:var(--navy-dark)}
+.edcat{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--navy-dark);font-weight:600}
+.opt{font:inherit;font-size:14.5px;border:1.5px solid #c5d3db;background:#fff;color:var(--txt);border-radius:8px;padding:5px 16px;cursor:pointer}
+.opt.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700}
+@media (max-width:640px){ table.cfgt tr.catr,table.ppl tr.catr{background:#eef6f9;border-radius:8px;padding:6px 8px} table.cfgt tr.catr td,table.ppl tr.catr td{display:block} }
 .chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
 .chip{background:#eef6f9;border:1px solid #cde4ec;border-radius:999px;padding:4px 6px 4px 14px;font-size:14.5px;display:flex;align-items:center;gap:6px}
 .chip.off{background:#f3f4f6;border-color:#e3e6ea;color:var(--mut)}
@@ -229,7 +234,7 @@ const writeIdOf=v=>{ const m=String(v||'').match(/[#&]w=([A-Za-z0-9_-]{30,})/)||
 const WID_LINK=writeIdOf(location.hash);
 const writeId=()=>WID_LINK||writeIdOf(D&&D.cfg.sys.write)||null;
 try{ localStorage.removeItem('pedsSelfpay_w'); }catch(e){}   // 舊版存在裝置上的網址，改成從試算表讀以後不再用
-let edit=null, saving=false, docNew='', _deferred=false;   // edit＝正在填的項目表單 {mode:'add'|'price'|'edit', old, name, price, pf, from, dirty}
+let edit=null, saving=false, docNew='', _deferred=false, ordering=null;   // ordering＝調整順序時的項目名稱草稿   // edit＝正在填的項目表單 {mode:'add'|'price'|'edit', old, name, price, pf, from, dirty}
 const busyKeys={};    // 剛按了刪除／復原、還在等試算表出現的：{key:時間}
 (function loadCache(){ try{ const c=JSON.parse(localStorage.getItem(LS_CACHE)||'null'); if(c&&c.sid===SID){ D={cfg:c.cfg,recs:c.recs}; checked=c.checked||0; prep(); } }catch(e){} })();
 function saveCache(){ try{ localStorage.setItem(LS_CACHE,JSON.stringify({sid:SID,cfg:D.cfg,recs:D.recs,checked})); }catch(e){} }
@@ -244,7 +249,7 @@ const hasMonth=k=>_months.has(k);
 function calcMonth(k){
   if(_calc[k]) return _calc[k];
   const z=()=>({n:0,amt:0,pf:0,item:{}}), add=(o,r)=>{ o.n++; o.amt+=r.amt; o.pf+=r.pf; o.item[r.item]=(o.item[r.item]||0)+1; };
-  const c={k,rows:[],n:0,amt:0,pf:0,item:{},doc:{},src:{'門診':z(),'病房':z()},noPrice:{},oddDoc:{},noDoc:0,noItem:0,badMrn:0,dups:new Set(),voided:[]}, seen={};
+  const c={k,rows:[],n:0,amt:0,pf:0,item:{},doc:{},src:{'門診':z(),'病房':z()},noPrice:{},oddDoc:{},noDoc:0,noItem:0,noMrn:0,dups:new Set(),voided:[]}, seen={};
   D.recs.forEach(r=>{
     if(r.k!==k) return;
     if(r.void){ c.voided.push(r); return; }
@@ -253,8 +258,8 @@ function calcMonth(k){
     add(c.doc[r.doc]||(c.doc[r.doc]=z()),r); add(c.src[r.src]||(c.src[r.src]=z()),r);
     if(!r.item) c.noItem++; else if(!r.known) c.noPrice[r.item]=(c.noPrice[r.item]||0)+1;
     if(!r.doc) c.noDoc++; else if(D.cfg.docs.length&&!D.cfg.docs.includes(r.doc)) c.oddDoc[r.doc]=(c.oddDoc[r.doc]||0)+1;
-    if(!/^\d{3}$/.test(r.mrn)) c.badMrn++;
-    const dk=`${r.d}|${r.mrn}|${r.item}`; if(seen[dk]){ c.dups.add(seen[dk]); c.dups.add(r.key); } else seen[dk]=r.key;   // 同一天、同病歷號末3碼、同項目
+    if(!r.mrn) c.noMrn++;
+    const dk=`${r.d}|${mrnCmp(r.mrn)}|${r.item}`; if(seen[dk]){ c.dups.add(seen[dk]); c.dups.add(r.key); } else seen[dk]=r.key;   // 同一天、同病歷號、同項目
   });
   return _calc[k]=c;
 }
@@ -344,8 +349,8 @@ function monthWarnings(c){
   const od=Object.keys(c.oddDoc); if(od.length) w.push(`醫師「${od.join('、')}」不在試算表「醫師」分頁的名單上（${sumVals(c.oddDoc)} 件），請確認是不是打錯字。`);
   if(c.noDoc) w.push(`有 ${c.noDoc} 筆沒填開單醫師。`);
   if(c.noItem) w.push(`有 ${c.noItem} 筆沒填項目。`);
-  if(c.badMrn) w.push(`有 ${c.badMrn} 筆的病歷號末3碼不是 3 位數字。`);
-  if(c.dups.size) w.push(`有 ${c.dups.size} 筆可能重複登錄（同一天、同病歷號末3碼、同項目），在「明細」標 ⚠。`);
+  if(c.noMrn) w.push(`有 ${c.noMrn} 筆沒填病歷號。`);
+  if(c.dups.size) w.push(`有 ${c.dups.size} 筆可能重複登錄（同一天、同病歷號、同項目），在「明細」標 ⚠。`);
   return w;
 }
 const unitOf=m=>m==='n'?'件':'元';
@@ -391,9 +396,12 @@ function renderMonth(){
       `<td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; }).join('')+
     `<tr class="tot"><td class="l nmc">合計</td>${io.map(it=>qtd(c.item[it].n,it)).join('')}<td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="PF">${fmt(c.pf)}</td><td class="amt" data-l="金額">${fmt(c.amt)}</td></tr></tbody></table></div>`);
   // 各項目
+  const itemRow=(n,o,cls,label)=>{ const p=label?null:priceOf(D.cfg,n,cur);
+    return `<tr${cls?` class="${cls}"`:''}><td class="l nmc">${label?esc(label):`<b>${esc(n)}</b>`}</td><td class="n sub" data-l="價錢">${label?'':p?fmt(p.price):'—'}</td>`+
+      `<td class="n sub" data-l="門診">${o.src['門診']||0}</td><td class="n sub" data-l="病房">${o.src['病房']||0}</td><td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; };
+  const icats=catsIn(D.cfg,io), catSum=cat=>io.filter(n=>catOf(D.cfg,n)===cat).reduce((s,n)=>{ const o=c.item[n]; s.n+=o.n; s.pf+=o.pf; s.amt+=o.amt; ['門診','病房'].forEach(x=>{ s.src[x]+=o.src[x]||0; }); return s; },{n:0,pf:0,amt:0,src:{'門診':0,'病房':0}});
   h+=sec('item','各項目',`${c.n} 件`,`<div class="tw"><table class="ppl"><thead><tr><th class="l">項目</th><th>價錢</th><th>門診</th><th>病房</th><th>件數</th><th>PF</th><th>金額</th></tr></thead><tbody>`+
-    (io.map(n=>{ const o=c.item[n], p=priceOf(D.cfg,n,cur); return `<tr><td class="l nmc"><b>${esc(n)}</b></td><td class="n sub" data-l="價錢">${p?fmt(p.price):'—'}</td>`+
-      `<td class="n sub" data-l="門診">${o.src['門診']||0}</td><td class="n sub" data-l="病房">${o.src['病房']||0}</td><td class="n sub" data-l="件數">${o.n}</td><td class="n sub" data-l="PF">${fmt(o.pf)}</td><td class="amt" data-l="金額">${fmt(o.amt)}</td></tr>`; }).join('')||'<tr><td class="l mut" colspan="7">這個月還沒有紀錄</td></tr>')+
+    (icats.map(cat=>(icats.length>1?itemRow('',catSum(cat),'catr',cat+' 小計'):'')+io.filter(n=>catOf(D.cfg,n)===cat).map(n=>itemRow(n,c.item[n])).join('')).join('')||'<tr><td class="l mut" colspan="7">這個月還沒有紀錄</td></tr>')+
     (io.length?`<tr class="tot"><td class="l nmc">合計</td><td class="n sub"></td><td class="n sub" data-l="門診">${c.src['門診'].n}</td><td class="n sub" data-l="病房">${c.src['病房'].n}</td><td class="n sub" data-l="件數">${c.n}</td><td class="n sub" data-l="PF">${fmt(c.pf)}</td><td class="amt" data-l="金額">${fmt(c.amt)}</td></tr>`:'')+
     '</tbody></table></div>');
   // 明細
@@ -408,8 +416,8 @@ function renderMonth(){
 }
 function recRow(r,c){
   const b=busyKeys[r.key];
-  return `<div class="rec${r.void?' void':''}"><span class="dd">${r.md}</span><span class="src ${r.src==='門診'?'o':'w'}">${r.src}</span><span class="m">${esc(r.mrn)}</span>`+
-    `<span class="i">${esc(r.item)}${c&&c.dups.has(r.key)?' <b class="dupw" title="同一天、同病歷號末3碼、同項目有兩筆以上">⚠ 重複？</b>':''}</span><span class="dc">${esc(r.doc)||'<span style="color:var(--bad)">未填</span>'}</span><span class="a">${fmt(r.amt)}</span>`+
+  return `<div class="rec${r.void?' void':''}"><span class="dd">${r.md}</span><span class="src ${r.src==='門診'?'o':'w'}">${r.src}</span><span class="m">${esc(mrnDisp(r.mrn,D.cfg.sys))}</span>`+
+    `<span class="i">${esc(r.item)}${c&&c.dups.has(r.key)?' <b class="dupw" title="同一天、同病歷號、同項目有兩筆以上">⚠ 重複？</b>':''}</span><span class="dc">${esc(r.doc)||'<span style="color:var(--bad)">未填</span>'}</span><span class="a">${fmt(r.amt)}</span>`+
     (b?'<span class="mut">處理中…</span>':r.void?`<button class="btn mini outline" data-act="restore" data-k="${esc(r.key)}">復原</button>`:`<button class="btn mini ghost" data-act="del" data-k="${esc(r.key)}">刪除</button>`)+'</div>';
 }
 function yearHtml(){
@@ -424,18 +432,27 @@ function yearHtml(){
 function cfgHtml(){
   const sys=D.cfg.sys, W=!!writeId(), nowK=todayKey(), offD=new Set(D.cfg.docsOff||[]);
   const sheetEdit=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(SID)}/edit${sys.itemsGid?'#gid='+encodeURIComponent(sys.itemsGid):''}`;
-  const rows=D.cfg.items.slice().sort((a,b)=>a.order-b.order).map(x=>{
-    const eff=priceOf(D.cfg,x.name,nowK)===x;   // 現在適用的那一列（調價、停用按鈕放在這一列）
+  // 排列：類別 → 後台排的順序；同一個項目的各列（調價紀錄）排在一起。調整順序時用 ordering 這份草稿
+  const names=ordering||itemNames(D.cfg), cats=catsIn(D.cfg,names), ncol=W?5:4;
+  const rowOf=x=>{ const eff=priceOf(D.cfg,x.name,nowK)===x;   // 現在適用的那一列（調價、停用按鈕放在這一列）
     return `<tr${eff||x.from>nowK?'':' class="old"'}><td class="l nmc">${esc(x.name)}${x.off?' <span class="tag">停用</span>':''}</td><td class="n pz" data-l="價錢">${fmt(x.price)}</td>`+
       `<td class="n sub" data-l="PF">${fmt(x.pfAmt)}</td><td class="n sub" data-l="適用起">${x.from?keyLabel(x.from)+'起':'—'}</td>`+
-      (W?`<td class="acts">${eff?`<button class="btn mini outline" data-act="ed-price" data-i="${x.order}">調價</button>`:''}<button class="btn mini ghost" data-act="ed-edit" data-i="${x.order}">修改</button>`+
-        (eff?`<button class="btn mini ghost" data-act="ed-off" data-n="${esc(x.name)}" data-v="${x.off?0:1}">${x.off?'恢復':'停用'}</button>`:'')+'</td>':'')+'</tr>'; }).join('');
+      (W&&!ordering?`<td class="acts">${eff?`<button class="btn mini outline" data-act="ed-price" data-i="${x.order}">調價</button>`:''}<button class="btn mini ghost" data-act="ed-edit" data-i="${x.order}">修改</button>`+
+        (eff?`<button class="btn mini ghost" data-act="ed-off" data-n="${esc(x.name)}" data-v="${x.off?0:1}">${x.off?'恢復':'停用'}</button>`:'')+'</td>':W?'<td class="acts"></td>':'')+'</tr>'; };
+  const ordRow=(n,i,list)=>`<tr><td class="l nmc">${esc(n)}</td><td class="acts" colspan="${ncol-1}"><button class="btn mini outline" data-act="ord-mv" data-n="${esc(n)}" data-d="-1"${i?'':' disabled'}>▲ 往上</button>`+
+    `<button class="btn mini outline" data-act="ord-mv" data-n="${esc(n)}" data-d="1"${i<list.length-1?'':' disabled'}>▼ 往下</button></td></tr>`;
+  const rows=cats.map(cat=>{ const list=names.filter(n=>catOf(D.cfg,n)===cat);
+    return `<tr class="catr"><td class="l" colspan="${ncol}">${esc(cat)}</td></tr>`+(ordering?list.map(ordRow).join(''):
+      list.map(n=>D.cfg.items.filter(x=>x.name===n).sort((a,b)=>(a.from||'').localeCompare(b.from||'')).map(rowOf).join('')).join('')); }).join('');
   let h=`<div class="tw"><table class="cfgt"><thead><tr><th class="l">項目</th><th>價錢</th><th>PF</th><th>適用起</th>${W?'<th></th>':''}</tr></thead>
-    <tbody>${rows||`<tr><td class="l mut" colspan="${W?5:4}">試算表「項目」分頁是空的</td></tr>`}</tbody></table></div>`;
-  if(W) h+=edit?editorHtml():'<div class="row"><button class="btn outline" data-act="ed-add">＋ 新增項目</button></div>';
-  // 開單醫師
+    <tbody>${rows||`<tr><td class="l mut" colspan="${ncol}">試算表「項目」分頁是空的</td></tr>`}</tbody></table></div>`;
+  if(W) h+=ordering?`<div class="row"><button class="btn" data-act="ord-save"${saving?' disabled':''}>${saving?'儲存中…':'儲存順序'}</button><button class="btn ghost" data-act="ord-cancel"${saving?' disabled':''}>取消</button></div>`:
+    edit?editorHtml():'<div class="row"><button class="btn outline" data-act="ed-add">＋ 新增項目</button><button class="btn ghost" data-act="ord-start">調整順序</button></div>';
+  // 開單醫師：沒有任何紀錄的可以刪除（打錯名字時用），有紀錄的只能停用
+  const used=new Set(D.recs.map(r=>r.doc));
   h+=`<div class="mixh" style="margin-top:16px">開單醫師</div><div class="chips">${D.cfg.docs.map(n=>{ const off=offD.has(n);
-    return `<span class="chip${off?' off':''}">${esc(n)}${off?'<span class="tag">停用</span>':''}${W?`<button class="btn mini ghost" data-act="doc-off" data-n="${esc(n)}" data-v="${off?0:1}">${off?'恢復':'停用'}</button>`:''}</span>`; }).join('')}</div>`;
+    return `<span class="chip${off?' off':''}">${esc(n)}${off?'<span class="tag">停用</span>':''}${!W?'':used.has(n)?`<button class="btn mini ghost" data-act="doc-off" data-n="${esc(n)}" data-v="${off?0:1}">${off?'恢復':'停用'}</button>`:
+      `<button class="btn mini ghost" data-act="doc-del" data-n="${esc(n)}">刪除</button>`}</span>`; }).join('')}</div>`;
   if(W) h+=`<div class="row"><input type="text" id="doc-new" placeholder="醫師姓名" autocomplete="off" value="${esc(docNew)}" style="width:150px"><button class="btn outline" data-act="doc-add"${saving?' disabled':''}>＋ 新增醫師</button></div>`;
   h+=`<div class="row"><a class="btn ghost" href="${esc(sheetEdit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
   return h;
@@ -448,9 +465,10 @@ function editorHtml(){
     <label>價錢<input type="number" inputmode="numeric" min="1" step="1" data-ed="price" value="${esc(e.price)}"></label>
     <label>PF<input type="number" inputmode="numeric" min="0" step="1" data-ed="pf" value="${esc(e.pf)}"></label>
     <label>適用起<input type="month" data-ed="from" value="${esc(e.from)}"></label></div>
+    ${e.mode==='price'?'':`<div class="edcat">類別 ${CATS.map(c=>`<button class="opt${e.cat===c?' on':''}" data-act="ed-cat" data-v="${c}">${c}</button>`).join('')}</div>`}
     <div class="row"><button class="btn" data-act="ed-save"${saving?' disabled':''}>${saving?'儲存中…':'儲存'}</button><button class="btn ghost" data-act="ed-cancel"${saving?' disabled':''}>取消</button></div></div>`;
 }
-const holdRender=()=>!!edit||(document.activeElement&&/^(doc-new|w-url)$/.test(document.activeElement.id));
+const holdRender=()=>!!edit||!!ordering||(document.activeElement&&/^(doc-new|w-url)$/.test(document.activeElement.id));
 const monthIn=k=>{ if(!k) return ''; const [y,m]=k.split('-').map(Number); return `${y+1911}-${pad(m)}`; };   // 115-11 → 2026-11（月份輸入框）
 const monthOut=v=>{ const m=String(v||'').match(/^(\d{4})-(\d{2})$/); return m?`${+m[1]-1911}/${+m[2]}`:''; };   // 2026-11 → 115/11（寫進試算表）
 const fromTxt=k=>k?keyLabel(k)+'起':'一直適用';
@@ -475,6 +493,7 @@ function edSave(){
   const e=edit; if(!e||saving) return;
   const name=String(e.mode==='price'?e.name:e.name||'').replace(/\s+/g,''), price=Number(e.price), pf=e.pf===''?NaN:Number(e.pf), from=monthOut(e.from);
   if(!name){ alert('請填項目名稱。'); return; }
+  if(e.mode!=='price'&&!e.cat){ alert('請選類別：檢驗或疫苗。'); return; }
   if(!(price>0&&Math.round(price)===price)){ alert('價錢請填大於 0 的整數。'); return; }
   if(!(pf>=0&&Math.round(pf)===pf)){ alert('PF 請填 0 以上的整數（元）。'); return; }
   if(pf>price){ alert('PF 不能比價錢高。'); return; }
@@ -483,11 +502,12 @@ function edSave(){
   const fk=from?parseFrom(from):null;
   const clash=D.cfg.items.some(x=>x.name===name&&(x.from||null)===fk&&!(e.mode==='edit'&&x.name===e.old.name&&x.price===e.old.price&&(x.from||null)===(e.old.from||null)));
   if(clash){ alert(`「${name}」${from?fromTxt(fk):'（一直適用）'}已經有一列了。要從某個月起改價錢，請按那一列的「調價」。`); return; }
-  const what=`項目：${name}\n價錢：${fmt(price)}\nPF：${fmt(pf)}\n適用：${fromTxt(fk)}`;
+  const cat=e.mode==='price'?catOf(D.cfg,name):e.cat;
+  const what=`項目：${name}（${cat}）\n價錢：${fmt(price)}\nPF：${fmt(pf)}\n適用：${fromTxt(fk)}`;
   const title={add:'新增這個項目？',price:`從${fromTxt(fk)}改用新價錢？`,edit:'修改這一列？'}[e.mode];
   const before=e.mode==='edit'?`\n\n原本：${e.old.name}・${fmt(e.old.price)}・${fromTxt(e.old.from)}`:'';
   if(!confirm(`${title}\n\n${what}${before}`)) return;
-  saveAdmin(e.mode==='edit'?{op:'editItem',old:{name:e.old.name,price:e.old.price,from:e.old.from?e.old.from.replace(/^(\d+)-0?(\d+)$/,'$1/$2'):''},name,price,pfAmt:pf,from}:{op:'addItem',name,price,pfAmt:pf,from});
+  saveAdmin(e.mode==='edit'?{op:'editItem',old:{name:e.old.name,price:e.old.price,from:e.old.from?e.old.from.replace(/^(\d+)-0?(\d+)$/,'$1/$2'):''},name,price,pfAmt:pf,from,cat}:{op:'addItem',name,price,pfAmt:pf,from,cat});
 }
 
 // ---------- 組成橫條 ----------
@@ -646,7 +666,7 @@ function showToday(){
 async function doVoid(key,restore){
   const r=D&&D.recs.find(x=>x.key===key); if(!r) return;
   if(!sysReady(D.cfg.sys)){ alert('試算表的「系統」分頁不完整，無法刪除。可以直接到試算表刪掉那一列。'); return; }
-  if(!confirm(`${restore?'復原':'刪除'}這一筆？\n\n${r.m}月${r.d}日・${r.src}・病歷號末3碼 ${r.mrn}\n${r.item}\n開單醫師：${r.doc||'未填'}`)) return;
+  if(!confirm(`${restore?'復原':'刪除'}這一筆？\n\n${r.m}月${r.d}日・${r.src}・病歷號 ${mrnDisp(r.mrn,D.cfg.sys)}\n${r.item}\n開單醫師：${r.doc||'未填'}`)) return;
   busyKeys[key]={v:!restore,at:Date.now()}; rerenderOpen();
   try{ await voidRec(D.cfg.sys,key,restore); }catch(e){ delete busyKeys[key]; rerenderOpen(); alert('送不出去（沒有網路？），請稍後再試。'); return; }
   for(const ms of [3000,6000,10000,20000]){ await new Promise(res=>setTimeout(res,ms)); await refresh(true); if(!busyKeys[key]) break; }
@@ -674,13 +694,27 @@ function act(a,t){
   else if(a==='showvoid'){ showVoid=!showVoid; renderAll(); }
   else if(a==='install'){ if(_installEvt){ const e=_installEvt; _installEvt=null; e.prompt(); renderAll(); } }
   else if(a==='open-browser') openInBrowser();
-  else if(a==='ed-add'){ edit={mode:'add',name:'',price:'',pf:'',from:''}; ui.cfg=true; renderAll(); const x=document.querySelector('[data-ed=name]'); if(x) x.focus(); }
+  else if(a==='ed-add'){ edit={mode:'add',name:'',price:'',pf:'',from:'',cat:''}; ui.cfg=true; renderAll(); const x=document.querySelector('[data-ed=name]'); if(x) x.focus(); }
   else if(a==='ed-price'||a==='ed-edit'){ const x=D.cfg.items.find(y=>y.order===Number(t.dataset.i)); if(!x) return;
-    edit=a==='ed-price'?{mode:'price',name:x.name,price:'',pf:'',from:monthIn(shiftKey(todayKey(),1))}:
-      {mode:'edit',old:{name:x.name,price:x.price,from:x.from},name:x.name,price:String(x.price),pf:String(x.pfAmt),from:monthIn(x.from)};
+    edit=a==='ed-price'?{mode:'price',name:x.name,price:'',pf:'',from:monthIn(shiftKey(todayKey(),1)),cat:catOf(D.cfg,x.name)}:
+      {mode:'edit',old:{name:x.name,price:x.price,from:x.from},name:x.name,price:String(x.price),pf:String(x.pfAmt),from:monthIn(x.from),cat:catOf(D.cfg,x.name)};
     renderAll(); const f=document.querySelector('[data-ed=price]'); if(f) f.focus(); }
   else if(a==='ed-cancel'){ if(edit&&edit.dirty&&!confirm('放棄還沒儲存的內容？')) return; edit=null; renderAll(); }
   else if(a==='ed-save') edSave();
+  else if(a==='ed-cat'){ if(edit){ edit.cat=t.dataset.v; edit.dirty=true; renderAll(); } }
+  else if(a==='ord-start'){ ordering=itemNames(D.cfg); edit=null; ui.cfg=true; renderAll(); }
+  else if(a==='ord-cancel'){ ordering=null; renderAll(); }
+  else if(a==='ord-mv'){   // 只在同一個類別裡上下移
+    const n=t.dataset.n, cat=catOf(D.cfg,n), list=ordering.filter(x=>catOf(D.cfg,x)===cat), i=list.indexOf(n), j=i+Number(t.dataset.d);
+    if(j<0||j>=list.length) return;
+    const a2=ordering.indexOf(list[i]), b2=ordering.indexOf(list[j]); [ordering[a2],ordering[b2]]=[ordering[b2],ordering[a2]]; renderAll(); }
+  else if(a==='ord-save'){
+    const txt=catsIn(D.cfg,ordering).map(cat=>`${cat}：`+ordering.filter(x=>catOf(D.cfg,x)===cat).map((x,i)=>`${i+1}. ${x}`).join('　')).join('\n');
+    if(!confirm(`用這個順序？（門診表單、病房 App、管理頁都照這個排）\n\n${txt}`)) return;
+    const names=ordering.slice(); saveAdmin({op:'orderItems',names}).then(ok=>{ if(ok){ ordering=null; renderAll(); } }); }
+  else if(a==='doc-del'){ const n=t.dataset.n;
+    if(!confirm(`從名單刪除「${n}」？\n\n這位醫師沒有任何紀錄；刪除後門診表單和病房 App 也不會出現。`)) return;
+    saveAdmin({op:'delDoc',name:n}); }
   else if(a==='ed-off'){ const n=t.dataset.n, off=t.dataset.v==='1';
     if(!confirm(off?`停用「${n}」？\n\n門診表單和病房 App 不會再出現這個選項；以前的紀錄照算。`:`恢復「${n}」？\n\n門診表單和病房 App 會再出現這個選項。`)) return;
     saveAdmin({op:'offItem',name:n,off}); }
