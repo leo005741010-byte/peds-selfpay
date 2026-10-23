@@ -144,7 +144,19 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#eef6f9}
 .dlg .cumh small{font-weight:400;color:var(--mut);margin-left:6px}
 .empty{text-align:center;color:var(--mut);padding:40px 10px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-input[type=text]{font:inherit;font-size:15px;border:1px solid #c5d3db;border-radius:7px;padding:6px 10px}
+input[type=text],input[type=number],input[type=month]{font:inherit;font-size:15px;border:1px solid #c5d3db;border-radius:7px;padding:6px 10px;background:#fff;color:var(--txt)}
+input:focus{outline:2px solid #8cc3d6;outline-offset:0}
+tr.old td{color:var(--mut)}
+td.acts{text-align:left;white-space:normal}
+td.acts .btn{margin:2px 4px 2px 0}
+.edbox{border:1px solid #cde4ec;background:#f5fafc;border-radius:10px;padding:12px 14px;margin-top:12px}
+.edgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:8px}
+.edgrid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--navy-dark);font-weight:600}
+.edgrid input{width:100%;font-size:16px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.chip{background:#eef6f9;border:1px solid #cde4ec;border-radius:999px;padding:4px 6px 4px 14px;font-size:14.5px;display:flex;align-items:center;gap:6px}
+.chip.off{background:#f3f4f6;border-color:#e3e6ea;color:var(--mut)}
+.chip .btn{padding:1px 9px}
 @media (max-width:640px){
   .card{padding:12px}.tile .v{font-size:21px}th,td{padding:6px 7px}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -163,6 +175,18 @@ input[type=text]{font:inherit;font-size:15px;border:1px solid #c5d3db;border-rad
   table.ppl td.q::before,table.ppl td.sub::before{content:attr(data-l) ' '}
   table.ppl td.z{display:none}
   table.ppl tr.tot{background:#f3f8fa;border-radius:8px;padding:10px 8px;border-bottom:none}
+  /* 項目與價錢：一個項目一塊（名稱＋價錢／PF 與適用起／按鈕） */
+  table.cfgt,table.cfgt tbody{display:block}
+  table.cfgt thead{display:none}
+  table.cfgt tr{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 10px;padding:10px 2px;border-bottom:1px solid var(--line)}
+  table.cfgt td{display:block;border:none;padding:0;text-align:left;white-space:normal}
+  table.cfgt td.nmc{order:1;flex:1 1 auto;font-size:15.5px;font-weight:600}
+  table.cfgt td.pz{order:2;margin-left:auto;font-size:15.5px;font-weight:700}
+  table.cfgt tr::before{content:'';order:3;flex-basis:100%;height:0}
+  table.cfgt td.sub{order:4;font-size:12.5px;color:var(--mut)}
+  table.cfgt td.sub::before{content:attr(data-l) ' '}
+  table.cfgt td.acts{order:6;flex-basis:100%;margin-top:4px}
+  table.cfgt td.acts:empty{display:none}
 }
 </style>
 </head>
@@ -193,6 +217,11 @@ let D=null, checked=0, busy=false, fail=null, delta=null;
 let cur=null, pickOpen=false, pickYear=null, _mbKeys=[];
 const ui={};          // 卡片展開狀態只記在這次開啟（每次打開都收起來）
 let showVoid=false, _calc={}, _months=new Set();
+// 在管理頁修改「項目」「醫師」：透過 Apps Script 網頁應用程式（網址＝修改權限，存在這台裝置或連結的 #w=…，不寫進試算表）
+const ADMIN_URL='https://leo005741010-byte.github.io/peds-selfpay/admin.html', LS_WRITE='pedsSelfpay_w';
+const writeIdOf=v=>{ const m=String(v||'').match(/[#&]w=([A-Za-z0-9_-]{30,})/)||String(v||'').match(/script\.google\.com\/macros\/s\/([A-Za-z0-9_-]{30,})\/(?:exec|dev)/); return m?m[1]:null; };
+let WID=(()=>{ const h=writeIdOf(location.hash); if(h){ try{ localStorage.setItem(LS_WRITE,h); }catch(e){} return h; } try{ return localStorage.getItem(LS_WRITE)||null; }catch(e){ return null; } })();
+let edit=null, saving=false, wSetup=false, docNew='', _deferred=false;   // edit＝正在填的項目表單 {mode:'add'|'price'|'edit', old, name, price, pf, from, dirty}
 const busyKeys={};    // 剛按了刪除／復原、還在等試算表出現的：{key:時間}
 (function loadCache(){ try{ const c=JSON.parse(localStorage.getItem(LS_CACHE)||'null'); if(c&&c.sid===SID){ D={cfg:c.cfg,recs:c.recs}; checked=c.checked||0; prep(); } }catch(e){} })();
 function saveCache(){ try{ localStorage.setItem(LS_CACHE,JSON.stringify({sid:SID,cfg:D.cfg,recs:D.recs,checked})); }catch(e){} }
@@ -252,7 +281,7 @@ async function refresh(silent){
       if(dl) delta={txt:dl,at:Date.now()}; }
     Object.keys(busyKeys).forEach(k=>{ const x=D.recs.find(y=>y.key===k); if(!x||x.void===busyKeys[k].v||Date.now()-busyKeys[k].at>60000) delete busyKeys[k]; });
     busy=false;
-    if(changed||!silent) renderAll(); else { renderStatus(); renderAlerts(); }
+    if((changed||!silent||_deferred)&&!holdRender()) renderAll(); else { if(changed) _deferred=true; renderStatus(); renderAlerts(); }
   }catch(e){
     busy=false; fail={at:Date.now(),msg:(e&&e.message)||String(e)};
     renderStatus(); renderAlerts(); if(!D) renderAll();
@@ -272,7 +301,7 @@ function renderAlerts(){
   $('alerts').innerHTML=a.join('');
 }
 function renderAll(){
-  renderAlerts(); renderStatus();
+  _deferred=false; renderAlerts(); renderStatus();
   if(!SID||!D){ renderSetup(); renderMonthBar([]); return; }
   const ks=allKeys(); if(!cur||!ks.includes(cur)) cur=ks.includes(todayKey())?todayKey():ks[ks.length-1];
   renderMonth(); renderMonthBar(ks);
@@ -366,7 +395,7 @@ function renderMonth(){
   // 各月合計（目前這一年）
   h+=sec('year','各月合計',`${cur.split('-')[0]}年`,yearHtml());
   // 項目與價錢（在試算表改）
-  h+=sec('cfg','項目與價錢',`${activeItems(D.cfg).length} 項`,cfgHtml());
+  h+=sec('cfg','項目與價錢',`${activeItems(D.cfg).length} 項・醫師 ${(D.cfg.docsOn||D.cfg.docs).length} 位`,cfgHtml());
   el.innerHTML=h;
 }
 function recRow(r,c){
@@ -385,11 +414,75 @@ function yearHtml(){
     <tr class="tot"><td class="l">合計</td><td class="n">${t.n}</td><td class="n">${t.o}</td><td class="n">${t.w}</td><td class="n">${fmt(t.amt)}</td><td class="amt">${fmt(t.pf)}</td></tr></tbody></table></div>`;
 }
 function cfgHtml(){
-  const sys=D.cfg.sys, edit=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(SID)}/edit${sys.itemsGid?'#gid='+encodeURIComponent(sys.itemsGid):''}`;
-  const rows=D.cfg.items.slice().sort((a,b)=>a.order-b.order).map(x=>`<tr><td class="l">${esc(x.name)}${x.off?' <span class="tag">停用</span>':''}</td><td class="n">${fmt(x.price)}</td>`+
-    `<td class="n">${Math.round(x.pf*1000)/10}%</td><td class="n">${fmt(Math.round(x.price*x.pf))}</td><td class="n">${x.from?keyLabel(x.from)+'起':'—'}</td></tr>`).join('');
-  return `<div class="tw"><table><thead><tr><th class="l">項目</th><th>價錢</th><th>PF 比例</th><th>PF</th><th>適用起</th></tr></thead><tbody>${rows||'<tr><td class="l mut" colspan="5">試算表「項目」分頁是空的</td></tr>'}</tbody></table></div>
-    <div class="row"><a class="btn outline" href="${esc(edit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
+  const sys=D.cfg.sys, W=!!WID, nowK=todayKey(), offD=new Set(D.cfg.docsOff||[]);
+  const sheetEdit=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(SID)}/edit${sys.itemsGid?'#gid='+encodeURIComponent(sys.itemsGid):''}`;
+  const rows=D.cfg.items.slice().sort((a,b)=>a.order-b.order).map(x=>{
+    const eff=priceOf(D.cfg,x.name,nowK)===x;   // 現在適用的那一列（調價、停用按鈕放在這一列）
+    return `<tr${eff||x.from>nowK?'':' class="old"'}><td class="l nmc">${esc(x.name)}${x.off?' <span class="tag">停用</span>':''}</td><td class="n pz" data-l="價錢">${fmt(x.price)}</td>`+
+      `<td class="n sub" data-l="PF 比例">${Math.round(x.pf*1000)/10}%</td><td class="n sub" data-l="PF">${fmt(Math.round(x.price*x.pf))}</td><td class="n sub" data-l="適用起">${x.from?keyLabel(x.from)+'起':'—'}</td>`+
+      (W?`<td class="acts">${eff?`<button class="btn mini outline" data-act="ed-price" data-i="${x.order}">調價</button>`:''}<button class="btn mini ghost" data-act="ed-edit" data-i="${x.order}">修改</button>`+
+        (eff?`<button class="btn mini ghost" data-act="ed-off" data-n="${esc(x.name)}" data-v="${x.off?0:1}">${x.off?'恢復':'停用'}</button>`:'')+'</td>':'')+'</tr>'; }).join('');
+  let h=`<div class="tw"><table class="cfgt"><thead><tr><th class="l">項目</th><th>價錢</th><th>PF 比例</th><th>PF</th><th>適用起</th>${W?'<th></th>':''}</tr></thead>
+    <tbody>${rows||`<tr><td class="l mut" colspan="${W?6:5}">試算表「項目」分頁是空的</td></tr>`}</tbody></table></div>`;
+  if(W) h+=edit?editorHtml():'<div class="row"><button class="btn outline" data-act="ed-add">＋ 新增項目</button></div>';
+  // 開單醫師
+  h+=`<div class="mixh" style="margin-top:16px">開單醫師</div><div class="chips">${D.cfg.docs.map(n=>{ const off=offD.has(n);
+    return `<span class="chip${off?' off':''}">${esc(n)}${off?'<span class="tag">停用</span>':''}${W?`<button class="btn mini ghost" data-act="doc-off" data-n="${esc(n)}" data-v="${off?0:1}">${off?'恢復':'停用'}</button>`:''}</span>`; }).join('')}</div>`;
+  if(W) h+=`<div class="row"><input type="text" id="doc-new" placeholder="醫師姓名" autocomplete="off" value="${esc(docNew)}" style="width:150px"><button class="btn outline" data-act="doc-add"${saving?' disabled':''}>＋ 新增醫師</button></div>`;
+  // 修改權限（網頁應用程式網址）
+  if(!W) h+=wSetup?`<div class="edbox"><div class="mixh">網頁應用程式網址</div><div class="row"><input type="text" id="w-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" style="flex:1;min-width:220px">
+      <button class="btn" data-act="w-save">儲存</button><button class="btn ghost" data-act="w-cancel">取消</button></div></div>`:'';
+  h+=`<div class="row">${W?'<button class="btn ghost" data-act="w-copy">複製副院長用的連結</button>':wSetup?'':'<button class="btn outline" data-act="w-setup">開啟在這裡修改</button>'}
+    <a class="btn ghost" href="${esc(sheetEdit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
+  return h;
+}
+// 新增／調價／修改的填寫框（按「儲存」才送出）
+function editorHtml(){
+  const e=edit, t={add:'新增項目',price:`調價：${e.name}`,edit:`修改：${e.old&&e.old.name}`}[e.mode];
+  return `<div class="edbox" id="cfg-edit"><div class="mixh">${esc(t)}</div><div class="edgrid">
+    ${e.mode==='price'?'':`<label>項目名稱<input type="text" data-ed="name" value="${esc(e.name)}" autocomplete="off"></label>`}
+    <label>價錢<input type="number" inputmode="numeric" min="1" step="1" data-ed="price" value="${esc(e.price)}"></label>
+    <label>PF 比例（%）<input type="number" inputmode="decimal" min="0" max="100" step="0.1" data-ed="pf" value="${esc(e.pf)}"></label>
+    <label>適用起<input type="month" data-ed="from" value="${esc(e.from)}"></label></div>
+    <div class="row"><button class="btn" data-act="ed-save"${saving?' disabled':''}>${saving?'儲存中…':'儲存'}</button><button class="btn ghost" data-act="ed-cancel"${saving?' disabled':''}>取消</button></div></div>`;
+}
+const holdRender=()=>!!edit||(document.activeElement&&/^(doc-new|w-url)$/.test(document.activeElement.id));
+const monthIn=k=>{ if(!k) return ''; const [y,m]=k.split('-').map(Number); return `${y+1911}-${pad(m)}`; };   // 115-11 → 2026-11（月份輸入框）
+const monthOut=v=>{ const m=String(v||'').match(/^(\d{4})-(\d{2})$/); return m?`${+m[1]-1911}/${+m[2]}`:''; };   // 2026-11 → 115/11（寫進試算表）
+const fromTxt=k=>k?keyLabel(k)+'起':'一直適用';
+async function adminPost(req){
+  const body=Object.assign({s:SID},req);
+  if(window.PS_MOCK&&window.PS_MOCK.admin) return window.PS_MOCK.admin(body);
+  const r=await fetch(`https://script.google.com/macros/s/${WID}/exec`,{method:'POST',body:JSON.stringify(body)});   // text/plain：不用預檢，跨網域可以讀回應
+  let j=null; try{ j=await r.json(); }catch(e){}
+  if(!j) throw new Error('網頁應用程式沒有回應（部署時「誰可以存取」要選「所有人」）');
+  if(!j.ok) throw new Error(j.msg||'修改失敗');
+}
+// 送出修改 → 成功後讀兩次試算表（剛改完 Google 那邊有時要幾秒才讀得到）
+async function saveAdmin(req,okMsg){
+  saving=true; renderAll();
+  try{ await adminPost(req); }
+  catch(e){ saving=false; renderAll(); alert('沒有改成功：'+((e&&e.message)||e)); return false; }
+  saving=false; edit=null; renderAll();
+  setTimeout(()=>refresh(true),1500); setTimeout(()=>refresh(true),6000);
+  return true;
+}
+function edSave(){
+  const e=edit; if(!e||saving) return;
+  const name=String(e.mode==='price'?e.name:e.name||'').replace(/\s+/g,''), price=Number(e.price), pf=e.pf===''?NaN:Number(e.pf), from=monthOut(e.from);
+  if(!name){ alert('請填項目名稱。'); return; }
+  if(!(price>0&&Math.round(price)===price)){ alert('價錢請填大於 0 的整數。'); return; }
+  if(!(pf>=0&&pf<=100)){ alert('PF 比例請填 0～100。'); return; }
+  if(e.from&&!from){ alert('適用起的月份不對。'); return; }
+  if(e.mode==='price'&&!from){ alert('調價要填「適用起」：從哪個月開始用新價錢。'); return; }
+  const fk=from?parseFrom(from):null;
+  const clash=D.cfg.items.some(x=>x.name===name&&(x.from||null)===fk&&!(e.mode==='edit'&&x.name===e.old.name&&x.price===e.old.price&&(x.from||null)===(e.old.from||null)));
+  if(clash){ alert(`「${name}」${from?fromTxt(fk):'（一直適用）'}已經有一列了。要從某個月起改價錢，請按那一列的「調價」。`); return; }
+  const pfAmt=Math.round(price*pf/100), what=`項目：${name}\n價錢：${fmt(price)}\nPF：${pf}%（${fmt(pfAmt)}）\n適用：${fromTxt(fk)}`;
+  const title={add:'新增這個項目？',price:`從${fromTxt(fk)}改用新價錢？`,edit:'修改這一列？'}[e.mode];
+  const before=e.mode==='edit'?`\n\n原本：${e.old.name}・${fmt(e.old.price)}・${fromTxt(e.old.from)}`:'';
+  if(!confirm(`${title}\n\n${what}${before}`)) return;
+  saveAdmin(e.mode==='edit'?{op:'editItem',old:{name:e.old.name,price:e.old.price,from:e.old.from?e.old.from.replace(/^(\d+)-0?(\d+)$/,'$1/$2'):''},name,price,pf,from}:{op:'addItem',name,price,pf,from});
 }
 
 // ---------- 組成橫條 ----------
@@ -554,6 +647,18 @@ async function doVoid(key,restore){
   for(const ms of [3000,6000,10000,20000]){ await new Promise(res=>setTimeout(res,ms)); await refresh(true); if(!busyKeys[key]) break; }
   delete busyKeys[key]; rerenderOpen();
 }
+async function saveWrite(){
+  const id=writeIdOf(($('w-url')||{}).value);
+  if(!id){ alert('這看起來不是網頁應用程式的網址（應該長得像 https://script.google.com/macros/s/…/exec）。'); return; }
+  if(!window.PS_MOCK){
+    let ok=false; try{ const r=await fetch(`https://script.google.com/macros/s/${id}/exec`); ok=(await r.text()).trim()==='ok'; }catch(e){}
+    if(!ok){ alert('連不上這個網址。\n請確認部署時「執行身分」選「我」、「誰可以存取」選「所有人」，而且程式碼是新版（有 doPost）。'); return; }
+  }
+  if(!confirm('在這台裝置開啟「項目與價錢」的修改？')) return;
+  WID=id; wSetup=false; try{ localStorage.setItem(LS_WRITE,id); }catch(e){}
+  history.replaceState(null,'',location.pathname+location.search+`#s=${SID}&w=${id}`);   // iPhone「加入主畫面」會存下含修改權限的完整網址
+  renderAll();
+}
 // 視窗開著時連視窗一起重畫（目前開的是哪一種記在 _dlg）
 let _dlg=null;
 function rerenderOpen(){ renderAll(); if($('mask').classList.contains('on')&&_dlg) _dlg(); }
@@ -574,6 +679,30 @@ function act(a,t){
   else if(a==='del') doVoid(k,false);
   else if(a==='restore') doVoid(k,true);
   else if(a==='showvoid'){ showVoid=!showVoid; renderAll(); }
+  else if(a==='ed-add'){ edit={mode:'add',name:'',price:'',pf:'10',from:''}; ui.cfg=true; renderAll(); const x=document.querySelector('[data-ed=name]'); if(x) x.focus(); }
+  else if(a==='ed-price'||a==='ed-edit'){ const x=D.cfg.items.find(y=>y.order===Number(t.dataset.i)); if(!x) return;
+    edit=a==='ed-price'?{mode:'price',name:x.name,price:'',pf:String(Math.round(x.pf*1000)/10),from:monthIn(shiftKey(todayKey(),1))}:
+      {mode:'edit',old:{name:x.name,price:x.price,from:x.from},name:x.name,price:String(x.price),pf:String(Math.round(x.pf*1000)/10),from:monthIn(x.from)};
+    renderAll(); const f=document.querySelector('[data-ed=price]'); if(f) f.focus(); }
+  else if(a==='ed-cancel'){ if(edit&&edit.dirty&&!confirm('放棄還沒儲存的內容？')) return; edit=null; renderAll(); }
+  else if(a==='ed-save') edSave();
+  else if(a==='ed-off'){ const n=t.dataset.n, off=t.dataset.v==='1';
+    if(!confirm(off?`停用「${n}」？\n\n門診表單和病房 App 不會再出現這個選項；以前的紀錄照算。`:`恢復「${n}」？\n\n門診表單和病房 App 會再出現這個選項。`)) return;
+    saveAdmin({op:'offItem',name:n,off}); }
+  else if(a==='doc-add'){ const n=String(($('doc-new')||{}).value||'').replace(/\s+/g,''); if(!n){ alert('請填醫師姓名。'); return; }
+    if((D.cfg.docsOn||D.cfg.docs).some(x=>canon(x)===canon(n))){ alert(`「${n}」已經在名單上了。`); return; }
+    if(!confirm(`新增開單醫師「${n}」？\n\n門診表單和病房 App 會出現這個名字。`)) return;
+    saveAdmin({op:'addDoc',name:n}).then(ok=>{ if(ok){ docNew=''; renderAll(); } }); }
+  else if(a==='doc-off'){ const n=t.dataset.n, off=t.dataset.v==='1';
+    if(!confirm(off?`停用「${n}」？\n\n門診表單和病房 App 不會再出現這個名字；以前的紀錄照算。`:`恢復「${n}」？`)) return;
+    saveAdmin({op:'offDoc',name:n,off}); }
+  else if(a==='w-setup'){ wSetup=true; ui.cfg=true; renderAll(); const x=$('w-url'); if(x) x.focus(); }
+  else if(a==='w-cancel'){ wSetup=false; renderAll(); }
+  else if(a==='w-save') saveWrite();
+  else if(a==='w-copy'){
+    const url=`${ADMIN_URL}?openExternalBrowser=1#s=${SID}&w=${WID}`, done=()=>{ const o=t.textContent; t.textContent='✓ 已複製'; setTimeout(()=>{ t.textContent=o; },1500); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('請複製這條連結：',url)); else prompt('請複製這條連結：',url);
+  }
   else if(a==='link'){
     const id=sheetIdOf(($('link')||{}).value);
     if(!id){ alert('這看起來不是正確的連結，請把收到的整條連結完整貼上。'); return; }
@@ -588,8 +717,13 @@ document.addEventListener('click',e=>{
   act(t.dataset.act,t);
 });
 document.addEventListener('toggle',e=>{ const d=e.target; if(d.dataset&&d.dataset.sec) ui[d.dataset.sec]=d.open; },true);
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ $('mask').classList.remove('on'); _dlg=null; } if(e.key==='Enter'&&e.target.id==='link') act('link',e.target); });
-window.addEventListener('hashchange',()=>{ const id=sheetIdOf(location.hash); if(id&&id!==SID) location.reload(); });
+document.addEventListener('input',e=>{ const t=e.target; if(edit&&t.dataset&&t.dataset.ed){ edit[t.dataset.ed]=t.value; edit.dirty=true; } if(t.id==='doc-new') docNew=t.value; });
+// 填到一半離開前提醒
+window.addEventListener('beforeunload',e=>{ if(edit&&edit.dirty){ e.preventDefault(); e.returnValue=''; } });
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ $('mask').classList.remove('on'); _dlg=null; } if(e.key==='Enter'&&e.target.id==='link') act('link',e.target);
+  if(e.key==='Enter'&&e.target.id==='doc-new') act('doc-add',e.target); if(e.key==='Enter'&&e.target.id==='w-url') saveWrite(); if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.ed) edSave(); });
+window.addEventListener('hashchange',()=>{ const id=sheetIdOf(location.hash), w=writeIdOf(location.hash); if((id&&id!==SID)||(w&&w!==WID)) location.reload(); });
 // 開著時每分鐘讀一次；切回來超過 15 秒沒讀過就補讀
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible') return;

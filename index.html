@@ -130,7 +130,7 @@ async function refresh(silent){
   busy=true; renderStatus();
   try{
     const r=await loadSheet(SID,['病房']);
-    const sig=JSON.stringify([activeItems(r.cfg),r.cfg.docs]), old=data?JSON.stringify([activeItems(data.cfg),data.cfg.docs]):'';
+    const sig=JSON.stringify([activeItems(r.cfg),r.cfg.docsOn]), old=data?JSON.stringify([activeItems(data.cfg),data.cfg.docsOn]):'';
     data={cfg:r.cfg,recs:r.recs}; checked=Date.now(); fail=null; saveCache();
     matchPending();
     busy=false;
@@ -197,7 +197,7 @@ function renderForm(){
     return;
   }
   if(!data){ el.innerHTML=`<div class="card empty">${fail?'讀不到試算表：'+esc(fail.msg):'讀取中…'}</div>`; return; }
-  const items=activeItems(data.cfg), docs=data.cfg.docs, today=isoDay(new Date());
+  const items=activeItems(data.cfg), docs=data.cfg.docsOn||data.cfg.docs, today=isoDay(new Date());
   if(draft.item&&!items.includes(draft.item)) draft.item='';
   el.innerHTML=`<div class="card">
     <div class="fl${errs.date?' err':''}">日期</div>

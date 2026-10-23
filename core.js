@@ -10,7 +10,7 @@
 // 本檔公開在網站上，所以不含任何姓名、價錢、試算表或表單網址：
 //   試算表代號由連結 #s=… 帶進來、存在這台裝置；其他全部從試算表讀。
 // ============================================================
-const APP_VER='2026.10.23a';
+const APP_VER='2026.10.23b';
 const LS_SHEET='pedsSelfpay_sheet';
 
 const $=id=>document.getElementById(id);
@@ -108,15 +108,18 @@ function parseItems(t){
     let pf=iF<0?0.1:r[iF];
     if(typeof pf==='string'){ const p=pf.replace(/[%\s]/g,''); pf=Number(p)||0; if(/%/.test(String(r[iF]))) pf/=100; }
     pf=Number(pf)||0; if(pf>1) pf/=100;   // 打 10 或 10% 都當 10%
-    const off=iOff>=0&&(r[iOff]===true||/^(true|v|✓|✔|是|停用|x)$/i.test(String(r[iOff]==null?'':r[iOff]).trim()));
+    const off=iOff>=0&&isOn(r[iOff]);
     out.push({name,price,pf,from:iFrom>=0?parseFrom(r[iFrom]):null,off,order:i});
   });
   return out;
 }
+const isOn=v=>v===true||/^(true|v|✓|✔|是|停用|x)$/i.test(String(v==null?'':v).trim());   // 「停用」欄打勾
+// 醫師：all＝名單上全部（舊紀錄比對用）；on＝沒勾停用的（表單與 App 的選項）
 function parseDocs(t){
-  const i=Math.max(0,t.cols.findIndex(l=>/醫師/.test(l))), seen={}, out=[];
-  t.rows.forEach(r=>{ const n=String(r[i]==null?'':r[i]).replace(/\s+/g,''); if(n&&!seen[n]){ seen[n]=1; out.push(n); } });
-  return out;
+  const i=Math.max(0,t.cols.findIndex(l=>/醫師/.test(l))), iOff=t.cols.findIndex(l=>/停用/.test(l)), seen={}, all=[], on=[], off=[];
+  t.rows.forEach(r=>{ const n=String(r[i]==null?'':r[i]).replace(/\s+/g,''); if(!n||seen[n]) return; seen[n]=1; all.push(n);
+    if(iOff>=0&&isOn(r[iOff])) off.push(n); else on.push(n); });
+  return {all,on,off};
 }
 function parseSys(t){
   const o={}; t.rows.forEach(r=>{ const k=normLabel(r[0]); if(k) o[k]=String(r[1]==null?'':r[1]).trim(); });
@@ -163,7 +166,7 @@ async function loadSheet(id,srcs){
   const [ti,td,ts,...tr]=await Promise.all([
     readTab(id,'項目',[/^項目/,/價錢|價格|金額/]), readTab(id,'醫師',[/^醫師$/],[/病歷/]), readTab(id,'系統',[/^鍵$/]),
     ...srcs.map(s=>s==='病房'?readTab(id,s,RESP.concat(/作廢/)):readTab(id,s,RESP,[/作廢/]))]);
-  const cfg={items:parseItems(ti),docs:parseDocs(td),sys:parseSys(ts)};
+  const dd=parseDocs(td), cfg={items:parseItems(ti),docs:dd.all,docsOn:dd.on,docsOff:dd.off,sys:parseSys(ts)};
   let recs=[], voids=[];
   tr.forEach((t,i)=>{ const p=parseResp(srcs[i],t,cfg.docs); recs=recs.concat(p.recs); voids=voids.concat(p.voids); });
   applyVoids(recs,voids);
