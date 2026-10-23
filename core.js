@@ -10,7 +10,7 @@
 // 本檔公開在網站上，所以不含任何姓名、價錢、試算表或表單網址：
 //   試算表代號由連結 #s=… 帶進來、存在這台裝置；其他全部從試算表讀。
 // ============================================================
-const APP_VER='2026.10.23b';
+const APP_VER='2026.10.23c';
 const LS_SHEET='pedsSelfpay_sheet';
 
 const $=id=>document.getElementById(id);
@@ -206,9 +206,28 @@ let _installEvt=null;   // Android／電腦 Chrome 可以由網頁按鈕叫出�
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); _installEvt=e; if(window.onInstallReady) window.onInstallReady(); });
 const isStandalone=()=>!!(navigator.standalone||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches));
 const isIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-function installHtml(){
-  if(isStandalone()) return '';
-  if(_installEvt) return '<button class="btn outline" data-act="install">📲 安裝到這台手機</button>';
-  if(isIOS()) return '<div class="mut">📲 安裝：Safari 下方「分享」→「加入主畫面」</div>';
-  return '';
+const isAndroid=()=>/Android/i.test(navigator.userAgent);
+const inAppBrowser=()=>/\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
+// 「變成手機 App」教學：還沒裝成 App 的手機才出現（LINE 裡先教怎麼換到瀏覽器，再教加到主畫面）。name＝主畫面上的名字
+function installHtml(name){
+  if(isStandalone()||!(isIOS()||isAndroid()||inAppBrowser())) return '';
+  const line=inAppBrowser(), ios=isIOS();
+  let h=`<div class="card instc"><div class="insth">📲 變成手機 App</div>`;
+  if(line) h+=`<div class="instp"><b>LINE 裡不能加到主畫面，要先換到${ios?' Safari':' Chrome'}：</b></div>
+    <div class="row"><button class="btn" data-act="open-browser">用${ios?' Safari':' Chrome'} 打開</button></div>
+    <ol><li>沒有跳過去的話：點右上角「⋯」→「以預設瀏覽器開啟」</li><li>打開後照下面做</li></ol>`;
+  if(ios) h+=`<div class="instp"><b>iPhone：</b></div><ol>
+    <li>用 <b>Safari</b> 打開這一頁</li>
+    <li>點下方的「分享」<span class="ico">⬆</span>（Chrome 在右上角）</li>
+    <li>往下滑，點「<b>加入主畫面</b>」→ 右上角「<b>新增</b>」</li>
+    <li>之後從主畫面的「${esc(name)}」圖示打開</li></ol>`;
+  else{
+    h+=`<div class="instp"><b>Android：</b></div>`;
+    if(_installEvt&&!line) h+=`<div class="row"><button class="btn" data-act="install">安裝到這台手機</button></div>`;
+    h+=`<ol><li>用 <b>Chrome</b> 打開這一頁</li><li>點右上角「<b>⋮</b>」</li><li>點「<b>加到主畫面</b>」或「<b>安裝應用程式</b>」→「安裝」</li>
+      <li>之後從主畫面的「${esc(name)}」圖示打開</li></ol>`;
+  }
+  return h+'</div>';
 }
+// 用外部瀏覽器重新打開同一頁（LINE 看到 openExternalBrowser=1 會改用 Safari／Chrome 開）
+function openInBrowser(){ location.href=location.origin+location.pathname+'?openExternalBrowser=1'+location.hash; }

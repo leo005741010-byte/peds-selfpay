@@ -144,6 +144,12 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#eef6f9}
 .dlg .cumh small{font-weight:400;color:var(--mut);margin-left:6px}
 .empty{text-align:center;color:var(--mut);padding:40px 10px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.instc .insth{font-weight:700;color:var(--navy-dark);font-size:15.5px;margin-bottom:6px}
+.instc .instp{margin-top:8px;font-size:14px}
+.instc ol{margin:6px 0 0;padding-left:22px;font-size:14px}
+.instc li{margin:3px 0}
+.instc .ico{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:12px;margin:0 2px}
+.steps{margin:4px 0 0;padding-left:22px;font-size:14px}.steps li{margin:3px 0}
 input[type=text],input[type=number],input[type=month]{font:inherit;font-size:15px;border:1px solid #c5d3db;border-radius:7px;padding:6px 10px;background:#fff;color:var(--txt)}
 input:focus{outline:2px solid #8cc3d6;outline-offset:0}
 tr.old td{color:var(--mut)}
@@ -195,6 +201,7 @@ td.acts .btn{margin:2px 4px 2px 0}
 <main class="wrap">
   <div id="alerts"></div>
   <div id="month-view"></div>
+  <div id="inst"></div>
   <div class="foot"><span id="status"></span><button class="btn mini ghost" id="btn-refresh" data-act="refresh">🔄 更新</button></div>
 </main>
 <div class="mask" id="mask"><div class="dlg" id="dlg"></div></div>
@@ -301,7 +308,7 @@ function renderAlerts(){
   $('alerts').innerHTML=a.join('');
 }
 function renderAll(){
-  _deferred=false; renderAlerts(); renderStatus();
+  _deferred=false; renderAlerts(); renderStatus(); $('inst').innerHTML=installHtml('兒科自費統計');
   if(!SID||!D){ renderSetup(); renderMonthBar([]); return; }
   const ks=allKeys(); if(!cur||!ks.includes(cur)) cur=ks.includes(todayKey())?todayKey():ks[ks.length-1];
   renderMonth(); renderMonthBar(ks);
@@ -430,9 +437,13 @@ function cfgHtml(){
     return `<span class="chip${off?' off':''}">${esc(n)}${off?'<span class="tag">停用</span>':''}${W?`<button class="btn mini ghost" data-act="doc-off" data-n="${esc(n)}" data-v="${off?0:1}">${off?'恢復':'停用'}</button>`:''}</span>`; }).join('')}</div>`;
   if(W) h+=`<div class="row"><input type="text" id="doc-new" placeholder="醫師姓名" autocomplete="off" value="${esc(docNew)}" style="width:150px"><button class="btn outline" data-act="doc-add"${saving?' disabled':''}>＋ 新增醫師</button></div>`;
   // 修改權限（網頁應用程式網址）
-  if(!W) h+=wSetup?`<div class="edbox"><div class="mixh">網頁應用程式網址</div><div class="row"><input type="text" id="w-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" style="flex:1;min-width:220px">
+  if(!W) h+=wSetup?`<div class="edbox"><div class="mixh">開通新增項目（只要做一次）</div><ol class="steps">
+      <li>Apps Script 右上「<b>部署</b>」→「<b>新增部署作業</b>」</li>
+      <li>左邊齒輪選「<b>網頁應用程式</b>」；執行身分「<b>我</b>」、誰可以存取「<b>所有人</b>」→「部署」</li>
+      <li>複製「網頁應用程式」的網址，貼在下面</li></ol>
+      <div class="row"><input type="text" id="w-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" style="flex:1;min-width:220px">
       <button class="btn" data-act="w-save">儲存</button><button class="btn ghost" data-act="w-cancel">取消</button></div></div>`:'';
-  h+=`<div class="row">${W?'<button class="btn ghost" data-act="w-copy">複製副院長用的連結</button>':wSetup?'':'<button class="btn outline" data-act="w-setup">開啟在這裡修改</button>'}
+  h+=`<div class="row">${W?'<button class="btn ghost" data-act="w-copy">複製副院長用的連結</button>':wSetup?'':'<button class="btn outline" data-act="w-setup">＋ 新增項目／修改價錢</button>'}
     <a class="btn ghost" href="${esc(sheetEdit)}" target="_blank" rel="noopener">到試算表修改</a>${/^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(sys.clinic)?`<a class="btn ghost" href="${esc(sys.clinic)}" target="_blank" rel="noopener">門診表單</a>`:''}</div>`;
   return h;
 }
@@ -679,6 +690,8 @@ function act(a,t){
   else if(a==='del') doVoid(k,false);
   else if(a==='restore') doVoid(k,true);
   else if(a==='showvoid'){ showVoid=!showVoid; renderAll(); }
+  else if(a==='install'){ if(_installEvt){ const e=_installEvt; _installEvt=null; e.prompt(); renderAll(); } }
+  else if(a==='open-browser') openInBrowser();
   else if(a==='ed-add'){ edit={mode:'add',name:'',price:'',pf:'10',from:''}; ui.cfg=true; renderAll(); const x=document.querySelector('[data-ed=name]'); if(x) x.focus(); }
   else if(a==='ed-price'||a==='ed-edit'){ const x=D.cfg.items.find(y=>y.order===Number(t.dataset.i)); if(!x) return;
     edit=a==='ed-price'?{mode:'price',name:x.name,price:'',pf:String(Math.round(x.pf*1000)/10),from:monthIn(shiftKey(todayKey(),1))}:
@@ -733,6 +746,7 @@ document.addEventListener('visibilitychange',()=>{
 setInterval(()=>{ if(document.visibilityState==='visible') refresh(true); },60*1000);
 setInterval(()=>{ if(document.visibilityState==='visible') checkVersion(()=>$('mask').classList.contains('on')||Object.keys(busyKeys).length>0); },10*60*1000);
 
+window.onInstallReady=()=>{ $('inst').innerHTML=installHtml('兒科自費統計'); };
 renderAll();
 refresh(true);
 </script>

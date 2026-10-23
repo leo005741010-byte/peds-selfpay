@@ -88,7 +88,11 @@ details.sec>summary .r{margin-left:auto;font-weight:400;color:var(--mut);font-si
 .empty{text-align:center;color:var(--mut);padding:30px 10px}
 .foot{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;color:var(--mut);font-size:12.5px;margin-top:4px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
-.inst{text-align:center;font-size:13px;margin:6px 0 10px}
+.instc .insth{font-weight:700;color:var(--navy-dark);font-size:15.5px;margin-bottom:6px}
+.instc .instp{margin-top:8px;font-size:14px}
+.instc ol{margin:6px 0 0;padding-left:22px;font-size:14px}
+.instc li{margin:3px 0}
+.instc .ico{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:12px;margin:0 2px}
 </style>
 </head>
 <body>
@@ -235,7 +239,7 @@ function renderRest(){
       `<button class="btn mini ghost" data-act="del" data-k="${esc(r.key)}">刪除</button></div>`; }).join('');
   const nT=data.recs.filter(r=>!r.void&&isT(r)).length;
   h+=`<details class="card sec" data-sec="recent"${ui.recent?' open':''}><summary><span>最近登錄</span><span class="r">今天 ${nT} 筆</span></summary>${rows||'<div class="mut">還沒有紀錄</div>'}</details>`;
-  const ins=installHtml(); if(ins) h+=`<div class="inst">${ins}</div>`;
+  h+=installHtml('兒科自費登錄');
   el.innerHTML=h;
 }
 function renderAll(){ renderAlerts(); renderForm(); renderRest(); renderStatus(); }
@@ -282,6 +286,7 @@ function act(a,t){
   else if(a==='del') doDel(t.dataset.k);
   else if(a==='recheck'){ pending.forEach(p=>{ if(p.st==='miss') p.st='check'; }); renderRest(); verifySoon(); }
   else if(a==='install'){ if(_installEvt){ const e=_installEvt; _installEvt=null; e.prompt(); renderRest(); } }
+  else if(a==='open-browser') openInBrowser();
   else if(a==='link'){
     const id=sheetIdOf(($('link')||{}).value);
     if(!id){ alert('這看起來不是正確的連結，請把收到的整條連結完整貼上。'); return; }
