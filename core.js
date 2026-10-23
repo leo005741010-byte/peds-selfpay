@@ -3,14 +3,14 @@
 // 兒科自費：病房登錄 App（index.html）與管理頁（admin.html）共用的程式。
 // 資料全部在同一份 Google 試算表：
 //   「門診」分頁＝門診表單（Google 表單，放在門診護理師電腦）的回應
-//   「病房」分頁＝病房表單的回應：這個 App 送出的都在這裡（「來院」欄＝門診／病房／其他）；刪除（作廢）紀錄也記在這裡
+//   「病房」分頁＝病房表單的回應：這個 App 送出的都在這裡（「來院」欄＝住院／門診／其他）；刪除（作廢）紀錄也記在這裡
 //   「項目」分頁＝自費項目、價錢、PF（每件的金額）、適用起、停用、類別（檢驗／疫苗）、排序（新增項目、調價都在這裡改）
 //   「醫師」分頁＝開單醫師名單
 //   「系統」分頁＝病房表單的送出位址與欄位代號（建立腳本自動填好）
 // 本檔公開在網站上，所以不含任何姓名、價錢、試算表或表單網址：
 //   試算表代號由連結 #s=… 帶進來、存在這台裝置；其他全部從試算表讀。
 // ============================================================
-const APP_VER='2026.10.23g';
+const APP_VER='2026.10.23h';
 const LS_SHEET='pedsSelfpay_sheet';
 
 const $=id=>document.getElementById(id);
@@ -156,12 +156,12 @@ function priceOf(cfg,item,key){
 const activeItems=cfg=>itemNames(cfg).filter(n=>{ const p=priceOf(cfg,n,todayKey()); return p&&!p.off; });
 
 // ---------- 門診／病房回應 ----------
-// 來院：App 送的「來院」欄（門診／病房／其他：說明）；空白＝這一列在哪個分頁就算哪裡（門診表單＝門診、舊的病房紀錄＝病房）
+// 來院：App 送的「來院」欄（住院／門診／其他：說明）；空白＝看在哪個分頁（門診表單＝門診、舊的病房紀錄＝住院）。以前送的「病房」也算住院
 function srcOf(raw,tab){
   const s=String(raw==null?'':raw).trim();
-  if(!s) return {src:tab,note:''};
+  if(!s) return {src:tab==='病房'?'住院':tab,note:''};
   if(/^門診/.test(s)) return {src:'門診',note:''};
-  if(/^病房/.test(s)) return {src:'病房',note:''};
+  if(/^(病房|住院)/.test(s)) return {src:'住院',note:''};
   return {src:'其他',note:s.replace(/^其他[:：\s]*/,'')};
 }
 // 回傳 {recs:[一個項目一筆], voids:[作廢或復原]}。一筆的 key＝分頁|送出時間|病歷號（刪除時用它指定是哪一筆）；
@@ -209,8 +209,8 @@ async function postForm(sys,fields){
   await fetch(sys.form,{method:'POST',mode:'no-cors',body});   // 沒網路時會丟例外
 }
 const submitRec=(sys,r)=>postForm(sys,{[sys.eDate]:r.date,[sys.eMrn]:r.mrn,[sys.eItem]:r.item,[sys.eDoc]:r.doc,[sys.eSrc||'']:r.src||''});
-const SRCS=['門診','病房','其他'];
-const srcCls=s=>({'門診':'o','病房':'w'}[s]||'x');   // 來院的顏色標籤
+const SRCS=['住院','門診','其他'];   // 登錄畫面由左到右；住院是預設
+const srcCls=s=>({'門診':'o','住院':'w'}[s]||'x');   // 來院的顏色標籤
 const voidRec=(sys,key,restore)=>postForm(sys,{[sys.eVoid]:(restore?'復原|':'')+key});
 
 // ---------- 網站有新版就自動換上（手機上的 App 常常只是從背景叫回來、不會重新載入） ----------
